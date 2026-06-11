@@ -1,0 +1,69 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: nep-system
+  datasource:
+    username: root
+    password: 182930
+    url: jdbc:mysql://localhost:3306/nep_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  main:
+    allow-circular-references: true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: public
+        group: DEFAULT_GROUP
+        fail-fast: false
+        heart-beat-interval: 5000
+        heart-beat-timeout: 15000
+  mail:
+    host: smtp.qq.com
+    username: 1967272143@qq.com
+    password: mxcnkucosukecihj
+    default-encoding: UTF-8
+    port: 587
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# MyBatis-Plus
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      table-prefix: nep_
+      id-type: auto
+
+# Knife4j
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+# Minio 对象存储
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket: nep-avatars
+
+# JWT
+jwt:
+  secret: NEP-Neusoft-Environmental-Protection-2026-SecretKey!!
+  expire: 86400000

@@ -1,0 +1,39 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: nep-gateway
+  main:
+    web-application-type: reactive
+
+  cloud:
+    # Nacos 服务发现
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: public
+        group: DEFAULT_GROUP
+
+    # Gateway 路由配置
+    gateway:
+      discovery:
+        locator:
+          enabled: true          # 自动从Nacos发现服务
+          lower-case-service-id: true
+      routes:
+        # 路由到 nep-system 业务服务
+        - id: nep-system-route
+          uri: lb://nep-system   # lb:// 表示负载均衡方式调用
+          predicates:
+            - Path=/api/**        # 所有 /api/** 的请求都转发到 nep-system
+          filters:
+            - StripPrefix=0
+
+        # Knife4j API文档路由
+        - id: nep-system-doc
+          uri: lb://nep-system
+          predicates:
+            - Path=/doc.html,/webjars/**,/v3/api-docs/**
+          filters:
+            - StripPrefix=0
