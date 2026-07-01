@@ -1,5 +1,10 @@
 import request from './index'
 
+/** 全景统计仪表盘 — 聚合KPI+图表数据（对接Statistics.vue） */
+export function getDashboard() {
+  return request.get('/statistics/dashboard')
+}
+
 /** 系统总览统计 */
 export function getOverview() {
   return request.get('/statistics/overview')

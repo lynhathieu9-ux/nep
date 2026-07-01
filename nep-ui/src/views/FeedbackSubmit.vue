@@ -155,6 +155,8 @@ const form = ref({
   provinceId: null,
   cityId: null,
   specificAddress: '',
+  longitude: null,
+  latitude: null,
   estimatedAqiLevel: null,
   description: '',
   supervisorId: Number(localStorage.getItem('userId') || 0)

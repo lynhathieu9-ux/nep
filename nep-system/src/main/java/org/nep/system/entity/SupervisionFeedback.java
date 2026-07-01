@@ -15,6 +15,10 @@ public class SupervisionFeedback extends BaseEntity {
     private Long provinceId;
     private Long cityId;
     private String specificAddress;
+    /** 经度 (地图选点) */
+    private Double longitude;
+    /** 纬度 (地图选点) */
+    private Double latitude;
     private Integer estimatedAqiLevel;
     private String description;
     /** 状态: PENDING/ASSIGNED/COMPLETED/REJECTED/ESCALATED */

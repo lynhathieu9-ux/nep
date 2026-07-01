@@ -4,15 +4,16 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.nep.common.result.Result;
-import org.nep.system.entity.AqiDetection;
-import org.nep.system.entity.City;
-import org.nep.system.entity.Province;
-import org.nep.system.entity.SupervisionFeedback;
+import org.nep.system.entity.*;
 import org.nep.system.mapper.*;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -30,17 +31,155 @@ public class StatisticsController {
     private final UserMapper userMapper;
     private final CityMapper cityMapper;
     private final ProvinceMapper provinceMapper;
+    private final GridAssignmentMapper gridAssignmentMapper;
 
     public StatisticsController(AqiDetectionMapper aqiMapper, SupervisionFeedbackMapper feedbackMapper,
-                                 UserMapper userMapper, CityMapper cityMapper, ProvinceMapper provinceMapper) {
+                                 UserMapper userMapper, CityMapper cityMapper, ProvinceMapper provinceMapper,
+                                 GridAssignmentMapper gridAssignmentMapper) {
         this.aqiMapper = aqiMapper;
         this.feedbackMapper = feedbackMapper;
         this.userMapper = userMapper;
         this.cityMapper = cityMapper;
         this.provinceMapper = provinceMapper;
+        this.gridAssignmentMapper = gridAssignmentMapper;
     }
 
-    @Operation(summary = "系统总览统计（首页数据卡片）")
+    @Operation(summary = "全景统计仪表盘 — 聚合KPI+图表数据（对接Statistics.vue）")
+    @GetMapping("/dashboard")
+    public Result<Map<String, Object>> dashboard() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        LocalDate today = LocalDate.now();
+
+        // ============ KPI 卡片 ============
+        Map<String, Object> kpi = new LinkedHashMap<>();
+
+        // 1. 环保监控网格节点数 = grid_assignment 有效记录数
+        LambdaQueryWrapper<GridAssignment> activeGrid = new LambdaQueryWrapper<>();
+        activeGrid.eq(GridAssignment::getStatus, 1);
+        kpi.put("gridNodes", gridAssignmentMapper.selectCount(activeGrid));
+
+        // 2. 近三十日异常预警 = 近30天反馈总数
+        LambdaQueryWrapper<SupervisionFeedback> recentW = new LambdaQueryWrapper<>();
+        recentW.ge(SupervisionFeedback::getCreateTime,
+                LocalDateTime.of(today.minusDays(30), LocalTime.MIN));
+        kpi.put("monthlyAlerts", feedbackMapper.selectCount(recentW));
+
+        // 3. 污染源追踪闭环率 = completed / total * 100
+        long total = feedbackMapper.selectCount(null);
+        LambdaQueryWrapper<SupervisionFeedback> completedW = new LambdaQueryWrapper<>();
+        completedW.eq(SupervisionFeedback::getStatus, "COMPLETED");
+        long completed = feedbackMapper.selectCount(completedW);
+        double rate = total > 0 ? Math.round(completed * 1000.0 / total) / 10.0 : 0;
+        kpi.put("closureRate", rate);
+
+        // 4. 年度优良天数累计 = 当年按日期去重，当天最高AQI ≤ 100的天数
+        LambdaQueryWrapper<AqiDetection> yearW = new LambdaQueryWrapper<>();
+        yearW.ge(AqiDetection::getCreateTime,
+                LocalDateTime.of(today.getYear(), 1, 1, 0, 0));
+        List<AqiDetection> yearDetections = aqiMapper.selectList(yearW);
+        long goodDays = yearDetections.stream()
+                .filter(d -> d.getFinalAqi() != null && d.getFinalAqi() <= 100)
+                .map(d -> d.getCreateTime() != null ? d.getCreateTime().toLocalDate() : null)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+        kpi.put("goodAirDays", goodDays);
+
+        result.put("kpi", kpi);
+
+        // ============ AQI 趋势折线图（近7天） ============
+        List<AqiDetection> weekDetections = aqiMapper.selectList(
+                new LambdaQueryWrapper<AqiDetection>()
+                        .ge(AqiDetection::getCreateTime,
+                                LocalDateTime.of(today.minusDays(6), LocalTime.MIN)));
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("MM-dd");
+        // 准备7天空数据
+        Map<String, Integer> dayAqiMap = new LinkedHashMap<>();
+        for (int i = 6; i >= 0; i--) {
+            dayAqiMap.put(today.minusDays(i).format(dateFmt), 0);
+        }
+        for (AqiDetection d : weekDetections) {
+            if (d.getFinalAqi() != null && d.getCreateTime() != null) {
+                String key = d.getCreateTime().toLocalDate().format(dateFmt);
+                if (dayAqiMap.containsKey(key)) {
+                    dayAqiMap.put(key, Math.max(dayAqiMap.get(key), d.getFinalAqi()));
+                }
+            }
+        }
+        List<Map<String, Object>> aqiTrend = new ArrayList<>();
+        for (Map.Entry<String, Integer> e : dayAqiMap.entrySet()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("date", e.getKey());
+            item.put("aqi", e.getValue());
+            aqiTrend.add(item);
+        }
+        result.put("aqiTrend", aqiTrend);
+
+        // ============ 污染聚类分布（环形饼图） ============
+        List<AqiDetection> allDetections = aqiMapper.selectList(null);
+        int excellent = 0, good = 0, light = 0, moderate = 0, heavy = 0;
+        for (AqiDetection d : allDetections) {
+            int aqi = d.getFinalAqi() != null ? d.getFinalAqi() : 0;
+            if (aqi <= 50) excellent++;
+            else if (aqi <= 100) good++;
+            else if (aqi <= 150) light++;
+            else if (aqi <= 200) moderate++;
+            else heavy++;
+        }
+        List<Map<String, Object>> aqiDistribution = new ArrayList<>();
+        aqiDistribution.add(Map.of("name", "优", "value", excellent, "color", "#2AA876"));
+        aqiDistribution.add(Map.of("name", "良", "value", good, "color", "#85C77A"));
+        aqiDistribution.add(Map.of("name", "轻度", "value", light, "color", "#F5A623"));
+        aqiDistribution.add(Map.of("name", "中度", "value", moderate, "color", "#E87A31"));
+        aqiDistribution.add(Map.of("name", "重度", "value", heavy, "color", "#D9534F"));
+        result.put("aqiDistribution", aqiDistribution);
+
+        // ============ 雷达图（最新一条检测记录） ============
+        LambdaQueryWrapper<AqiDetection> latestW = new LambdaQueryWrapper<>();
+        latestW.orderByDesc(AqiDetection::getCreateTime).last("LIMIT 1");
+        List<AqiDetection> latest = aqiMapper.selectList(latestW);
+        Map<String, Object> radar = new LinkedHashMap<>();
+        if (!latest.isEmpty() && latest.get(0) != null) {
+            AqiDetection ld = latest.get(0);
+            radar.put("so2", ld.getSo2Aqi() != null ? ld.getSo2Aqi() : 0);
+            radar.put("co", ld.getCoAqi() != null ? ld.getCoAqi() : 0);
+            radar.put("no2", 0);   // 表中暂无 NO₂ 字段
+            radar.put("pm10", 0);  // 表中暂无 PM10 字段
+            radar.put("pm25", ld.getPm25Aqi() != null ? ld.getPm25Aqi() : 0);
+            radar.put("o3", 0);    // 表中暂无 O₃ 字段
+        } else {
+            radar.put("so2", 0); radar.put("co", 0); radar.put("no2", 0);
+            radar.put("pm10", 0); radar.put("pm25", 0); radar.put("o3", 0);
+        }
+        result.put("radar", radar);
+
+        // ============ 省份异常频次柱状图 ============
+        var provinceList = provinceMapper.selectList(null);
+        List<Map<String, Object>> provinceAnomalies = new ArrayList<>();
+        for (var p : provinceList) {
+            LambdaQueryWrapper<SupervisionFeedback> pw = new LambdaQueryWrapper<>();
+            pw.eq(SupervisionFeedback::getProvinceId, p.getId());
+            long cnt = feedbackMapper.selectCount(pw);
+            if (cnt > 0) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("name", p.getName());
+                item.put("value", cnt);
+                provinceAnomalies.add(item);
+            }
+        }
+        provinceAnomalies.sort((a, b) -> Long.compare(
+                ((Number) b.get("value")).longValue(),
+                ((Number) a.get("value")).longValue()));
+        // 取前10名
+        if (provinceAnomalies.size() > 10) {
+            provinceAnomalies = provinceAnomalies.subList(0, 10);
+        }
+        result.put("provinceAnomalies", provinceAnomalies);
+
+        return Result.ok(result);
+    }
+
+
     @GetMapping("/overview")
     public Result<Map<String, Object>> overview() {
         Map<String, Object> result = new LinkedHashMap<>();
