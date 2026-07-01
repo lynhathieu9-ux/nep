@@ -99,11 +99,12 @@
             <artifactId>minio</artifactId>
         </dependency>
 
-        <!-- Apache POI - Excel 报表导出 -->
+        <!-- iText7 - PDF 报表导出 -->
         <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-ooxml</artifactId>
-            <version>5.3.0</version>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itext7-core</artifactId>
+            <version>7.2.5</version>
+            <type>pom</type>
         </dependency>
     </dependencies>
 

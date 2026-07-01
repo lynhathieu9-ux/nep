@@ -109,11 +109,11 @@ async function handleExport() {
   exporting.value = true
   try {
     const res = await exportSpatialReport()
-    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const blob = new Blob([res], { type: 'application/pdf' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'NEP空间分析报告_' + new Date().toISOString().substring(0,10) + '.xlsx'
+    a.download = 'NEP空间分析报告_' + new Date().toISOString().substring(0,10) + '.pdf'
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('空间分析报告导出成功')

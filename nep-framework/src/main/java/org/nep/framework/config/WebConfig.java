@@ -29,7 +29,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/region/**", "/api/images/**",
                         "/api/statistics/**", "/api/news/**",
                         "/api/knowledge/**", "/api/banner/**",
-                        "/api/dict/**", "/api/aqi/**");
+                        "/api/dict/**", "/api/aqi/**", "/api/export/**");
     }
 
     /** 头像文件静态资源映射 */

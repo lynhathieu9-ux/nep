@@ -1,74 +1,78 @@
 /* ====================================================
    东软环保公众监督系统 (NEP) - 全局主题变量
-   支持亮色/暗黑模式切换
+   政务系统视觉规范：严谨、秩序、克制
+   亮色/暗黑模式双主题支持
    ==================================================== */
 
 /* ==================== 亮色主题（默认） ==================== */
 :root {
-  /* 主色调 */
-  --color-primary: #2E7D32;
-  --color-primary-light: #4CAF50;
-  --color-primary-dark: #1B5E20;
+  /* ===== 主色调（环保绿） ===== */
+  --color-primary: #529b2e;
+  --color-primary-light: #67C23A;
+  --color-primary-dark: #3B7620;
+  --color-primary-bg: rgba(82, 155, 46, 0.08);
   --color-accent: #FF6F00;
 
-  /* 背景 */
-  --bg-page: #F5F7FA;
+  /* ===== 背景色 ===== */
+  --bg-page: #FFFFFF;
   --bg-card: #FFFFFF;
-  --bg-sidebar: #1A2332;
+  --bg-sidebar: #F8F9FA;
   --bg-header: #FFFFFF;
 
-  /* 文字 */
-  --text-primary: #1A1A2E;
-  --text-secondary: #6B7280;
-  --text-inverse: #FFFFFF;
+  /* ===== 文字色（三级灰阶） ===== */
+  --text-primary: #303133;    /* 一级：标题 */
+  --text-secondary: #909399;  /* 二级：正文/简介 */
+  --text-meta: #C0C4CC;       /* 三级：日期/数据 */
 
-  /* 边框 & 分割线 */
-  --border-color: #E5E7EB;
-  --divider: #F0F0F0;
+  /* ===== 边框 & 分割线 ===== */
+  --border-color: #EBEEF5;
+  --divider: #F0F2F5;
 
-  /* 阴影 */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  /* ===== 阴影 ===== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 12px 24px -8px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 12px 24px -8px rgba(0, 0, 0, 0.12);
 
-  /* 圆角 */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  /* ===== 圆角 ===== */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 
-  /* 动画 */
+  /* ===== 动画 ===== */
   --transition-fast: 0.15s ease;
-  --transition-normal: 0.3s ease;
+  --transition-normal: 0.3s ease-in-out;
 }
 
 /* ==================== 暗黑主题 ==================== */
 html.dark {
-  --color-primary: #4CAF50;
-  --color-primary-light: #66BB6A;
-  --color-primary-dark: #388E3C;
+  --color-primary: #67C23A;
+  --color-primary-light: #85CE61;
+  --color-primary-dark: #529b2e;
+  --color-primary-bg: rgba(103, 194, 58, 0.12);
 
-  --bg-page: #0F172A;
-  --bg-card: #1E293B;
-  --bg-sidebar: #0B1120;
-  --bg-header: #1E293B;
+  --bg-page: #1A1A2E;
+  --bg-card: #242438;
+  --bg-sidebar: #1A1A2E;
+  --bg-header: #242438;
 
-  --text-primary: #E2E8F0;
-  --text-secondary: #94A3B8;
-  --text-inverse: #FFFFFF;
+  --text-primary: #E4E7ED;
+  --text-secondary: #909399;
+  --text-meta: #6B7280;
 
-  --border-color: #334155;
-  --divider: #1E293B;
+  --border-color: #333348;
+  --divider: #2A2A3C;
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-hover: 0 12px 24px -8px rgba(0, 0, 0, 0.6);
 }
 
-/* ==================== 全局过渡 ==================== */
-* {
+/* ==================== 全局过渡（仅背景、颜色、边框） ==================== */
+body {
   transition: background-color var(--transition-normal),
-              color var(--transition-normal),
-              border-color var(--transition-normal);
+              color var(--transition-normal);
 }
 
 /* ==================== 页面过渡动画 ==================== */
@@ -103,4 +107,163 @@ html.dark {
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s infinite;
   border-radius: var(--radius-sm);
+}
+
+/* ==================== 全局卡片规范 ==================== */
+/* 所有 .el-card 和自定义卡片统一样式 */
+.nep-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  transition: all var(--transition-normal);
+  cursor: pointer;
+}
+
+.nep-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* 纯展示卡片（不可点击） */
+.nep-card-static {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+/* ==================== 全局 Element Plus 覆盖 ==================== */
+
+/* --- el-card 覆盖 --- */
+.el-card {
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: none !important;
+  transition: all var(--transition-normal);
+}
+
+.el-card:hover {
+  box-shadow: var(--shadow-hover) !important;
+}
+
+/* --- el-tag 轻量化 --- */
+.el-tag--small {
+  border: none !important;
+  font-weight: 400;
+}
+
+/* --- 标签页去框化 --- */
+.el-radio-button__inner {
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 6px 16px;
+  border-radius: var(--radius-sm) !important;
+}
+
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  color: var(--color-primary) !important;
+  background: var(--color-primary-bg) !important;
+  box-shadow: none !important;
+  font-weight: 500;
+}
+
+/* --- 搜索框去框化 --- */
+.search-input-clean .el-input__wrapper {
+  background: var(--divider);
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-normal);
+}
+
+.search-input-clean .el-input__wrapper:hover {
+  background: var(--border-color);
+}
+
+.search-input-clean .el-input__wrapper.is-focus {
+  background: var(--bg-card);
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+}
+
+/* --- 分页器 --- */
+.el-pagination.is-background .el-pager li:not(.is-disabled).is-active {
+  background-color: var(--color-primary) !important;
+}
+
+/* ==================== 图片占位规范 ==================== */
+.card-cover-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, #E8F5E9 0%, #E0F2F1 50%, #F1F8E9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  position: relative;
+}
+
+.card-cover-placeholder::after {
+  content: '🌿';
+  font-size: 48px;
+  opacity: 0.3;
+}
+
+/* ==================== 吸顶容器 ==================== */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-page);
+  padding-bottom: 16px;
+  transition: box-shadow var(--transition-normal);
+}
+
+.sticky-header.is-scrolled {
+  box-shadow: 0 1px 0 0 var(--border-color);
+}
+
+/* ==================== 排版工具类 ==================== */
+.text-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.text-body {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.text-meta {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-meta);
+}
+
+.text-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

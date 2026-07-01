@@ -45,6 +45,7 @@ public class AuthGlobalFilter implements GlobalFilter {
             "/api/dict/",
             "/api/statistics/",
             "/api/aqi/",
+            "/api/export/",
             "/doc.html",
             "/webjars/",
             "/v3/api-docs",

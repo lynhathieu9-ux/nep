@@ -22,9 +22,10 @@ request.interceptors.request.use(
 // 响应拦截器 - 401跳转登录，Blob下载直接放行
 request.interceptors.response.use(
   response => {
-    // 文件下载（Blob）直接返回，不做 JSON code 检查
+    // 文件下载（Blob/PDF）直接返回，不做 JSON code 检查
     const contentType = response.headers['content-type'] || ''
     if (contentType.includes('application/vnd.openxmlformats-officedocument') ||
+        contentType.includes('application/pdf') ||
         contentType.includes('application/octet-stream') ||
         response.config.responseType === 'blob') {
       return response.data

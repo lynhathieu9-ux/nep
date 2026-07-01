@@ -1,14 +1,26 @@
 package org.nep.content.report;
 
+import com.itextpdf.kernel.colors.ColorConstants;
+import com.itextpdf.kernel.colors.DeviceRgb;
+import com.itextpdf.kernel.events.Event;
+import com.itextpdf.kernel.events.IEventHandler;
+import com.itextpdf.kernel.events.PdfDocumentEvent;
+import com.itextpdf.kernel.font.PdfFont;
+import com.itextpdf.kernel.font.PdfFontFactory;
+import com.itextpdf.kernel.geom.PageSize;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.kernel.pdf.canvas.PdfCanvas;
+import com.itextpdf.layout.Document;
+import com.itextpdf.layout.borders.Border;
+import com.itextpdf.layout.element.*;
+import com.itextpdf.layout.properties.TextAlignment;
+import com.itextpdf.layout.properties.UnitValue;
+import com.itextpdf.layout.properties.VerticalAlignment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.nep.system.dto.MapAqiResult;
 import org.nep.system.entity.AqiDetection;
-import org.nep.system.entity.City;
-import org.nep.system.entity.Province;
 import org.nep.system.mapper.*;
 import org.springframework.stereotype.Service;
 
@@ -19,11 +31,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 空间分析报告生成服务
+ * 空间分析报告生成服务 (PDF格式)
  * <p>
- * 生成包含以下 Sheet 的 Excel 报告：
+ * 生成包含以下章节的 PDF 报告：
  * <ol>
- *   <li>宏观态势总览 - KPI 指标卡片</li>
+ *   <li>封面 + 宏观态势总览 - KPI 指标卡片</li>
  *   <li>污染热点地图 - 省份/城市 AQI 聚合</li>
  *   <li>AQI 等级分布 - 六等级统计</li>
  *   <li>反馈状态分布 - 工单状态</li>
@@ -45,70 +57,116 @@ public class SpatialReportService {
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    // NEP 品牌色
+    private static final DeviceRgb COLOR_PRIMARY = new DeviceRgb(24, 144, 255);    // #1890FF
+    private static final DeviceRgb COLOR_DARK = new DeviceRgb(0, 42, 85);          // 深蓝
+    private static final DeviceRgb COLOR_HEADER_BG = new DeviceRgb(0, 42, 85);
+    private static final DeviceRgb COLOR_STRIPE = new DeviceRgb(240, 247, 255);
+    private static final DeviceRgb COLOR_TEXT = new DeviceRgb(51, 51, 51);
+    private static final DeviceRgb COLOR_GRAY = new DeviceRgb(140, 140, 140);
+
+    // AQI 等级颜色
+    private static final DeviceRgb[] AQI_COLORS = {
+        new DeviceRgb(0, 228, 0),       // 优 - 绿色
+        new DeviceRgb(255, 255, 0),     // 良 - 黄色
+        new DeviceRgb(255, 126, 0),     // 轻度 - 橙色
+        new DeviceRgb(255, 0, 0),       // 中度 - 红色
+        new DeviceRgb(153, 0, 76),      // 重度 - 紫色
+        new DeviceRgb(126, 0, 35)       // 严重 - 褐红
+    };
+
     /**
-     * 生成空间分析报告 Excel 文件
-     * @return byte[] Excel 文件字节数组
+     * 生成空间分析报告 PDF 文件
+     * @return byte[] PDF 文件字节数组
      */
     public byte[] generateReport() {
-        try (Workbook wb = new XSSFWorkbook()) {
-            // 创建样式
-            CellStyle titleStyle = createTitleStyle(wb);
-            CellStyle headerStyle = createHeaderStyle(wb);
-            CellStyle dataStyle = createDataStyle(wb);
-            CellStyle numberStyle = createNumberStyle(wb);
-            CellStyle subtitleStyle = createSubtitleStyle(wb);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            Document doc = new Document(pdf, PageSize.A4);
+            doc.setMargins(45, 40, 45, 40);
 
-            // Sheet 1: 宏观态势总览
-            sheetOverview(wb, titleStyle, headerStyle, dataStyle, numberStyle, subtitleStyle);
+            // 加载中文字体
+            PdfFont titleFont = loadFont("STSong-Light", "UniGB-UCS2-H");
+            PdfFont bodyFont = titleFont; // 复用
 
-            // Sheet 2: 污染热点地图
-            sheetHotspotMap(wb, titleStyle, headerStyle, dataStyle, numberStyle, subtitleStyle);
+            // 页脚：页码
+            pdf.addEventHandler(PdfDocumentEvent.END_PAGE, new IEventHandler() {
+                @Override
+                public void handleEvent(Event event) {
+                    try {
+                        PdfDocumentEvent e = (PdfDocumentEvent) event;
+                        PdfCanvas canvas = new PdfCanvas(e.getPage());
+                        canvas.beginText()
+                            .setFontAndSize(PdfFontFactory.createFont(), 9)
+                            .moveText(40, 25)
+                            .showText("- " + pdf.getPageNumber(e.getPage()) + " -")
+                            .endText();
+                    } catch (java.io.IOException ignored) {
+                        // 页脚渲染失败不影响主体内容
+                    }
+                }
+            });
 
-            // Sheet 3: AQI 等级分布
-            sheetAqiDistribution(wb, titleStyle, headerStyle, dataStyle, numberStyle, subtitleStyle);
+            // ===== 封面 + 宏观态势总览 =====
+            renderCoverAndOverview(doc, pdf, titleFont, bodyFont);
 
-            // Sheet 4: 反馈状态分布
-            sheetFeedbackStatus(wb, titleStyle, headerStyle, dataStyle, numberStyle, subtitleStyle);
+            // ===== 污染热点地图 =====
+            doc.add(new AreaBreak());
+            renderHotspotMap(doc, titleFont, bodyFont);
 
-            // Sheet 5: 各省份统计
-            sheetProvinceStats(wb, titleStyle, headerStyle, dataStyle, numberStyle, subtitleStyle);
+            // ===== AQI 等级分布 =====
+            doc.add(new AreaBreak());
+            renderAqiDistribution(doc, titleFont, bodyFont);
 
-            // Sheet 6: 月度趋势
-            sheetMonthlyTrend(wb, titleStyle, headerStyle, dataStyle, numberStyle, subtitleStyle);
+            // ===== 反馈状态分布 =====
+            doc.add(new AreaBreak());
+            renderFeedbackStatus(doc, titleFont, bodyFont);
 
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            wb.write(baos);
-            log.info("空间分析报告生成成功，文件大小: {} bytes", baos.size());
+            // ===== 各省份统计 =====
+            doc.add(new AreaBreak());
+            renderProvinceStats(doc, titleFont, bodyFont);
+
+            // ===== 月度趋势 =====
+            doc.add(new AreaBreak());
+            renderMonthlyTrend(doc, titleFont, bodyFont);
+
+            int pageCount = pdf.getNumberOfPages();
+            doc.close();
+            log.info("PDF空间分析报告生成成功，文件大小: {} bytes，共 {} 页",
+                    baos.size(), pageCount);
             return baos.toByteArray();
         } catch (Exception e) {
-            log.error("生成报告失败", e);
+            log.error("生成PDF报告失败", e);
             throw new RuntimeException("报告生成失败: " + e.getMessage(), e);
         }
     }
 
-    // ==================== Sheet 1: 宏观态势总览 ====================
+    // ==================== 封面 + 宏观态势总览 ====================
 
-    private void sheetOverview(Workbook wb, CellStyle title, CellStyle header,
-                                CellStyle data, CellStyle number, CellStyle sub) {
-        Sheet sheet = wb.createSheet("宏观态势总览");
-        int r = 0;
+    private void renderCoverAndOverview(Document doc, PdfDocument pdf, PdfFont titleFont, PdfFont bodyFont) {
+        // 报告标题
+        Paragraph title = new Paragraph("东软环保公众监督系统")
+                .setFont(titleFont).setFontSize(24).setFontColor(COLOR_DARK)
+                .setTextAlignment(TextAlignment.CENTER)
+                .setMarginTop(80);
+        doc.add(title);
 
-        // 标题
-        Row titleRow = sheet.createRow(r++);
-        Cell titleCell = titleRow.createCell(0);
-        titleCell.setCellValue("东软环保公众监督系统 - 空间分析报告");
-        titleCell.setCellStyle(title);
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 3));
-        titleRow.setHeightInPoints(28);
+        Paragraph subtitle = new Paragraph("空间分析报告")
+                .setFont(titleFont).setFontSize(18).setFontColor(COLOR_PRIMARY)
+                .setTextAlignment(TextAlignment.CENTER)
+                .setMarginBottom(12);
+        doc.add(subtitle);
 
-        // 生成时间
-        Row timeRow = sheet.createRow(r++);
-        Cell timeCell = timeRow.createCell(0);
-        timeCell.setCellValue("生成时间: " + LocalDateTime.now().format(DT_FMT));
-        timeCell.setCellStyle(sub);
-        sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, 3));
+        Paragraph time = new Paragraph("生成时间: " + LocalDateTime.now().format(DT_FMT))
+                .setFont(bodyFont).setFontSize(10).setFontColor(COLOR_GRAY)
+                .setTextAlignment(TextAlignment.CENTER)
+                .setMarginBottom(40);
+        doc.add(time);
 
-        r++; // 空行
+        // 分隔线
+        doc.add(new Divider().setMarginBottom(24));
 
         // KPI 数据
         long totalDetections = aqiMapper.selectCount(null);
@@ -124,82 +182,72 @@ public class SpatialReportService {
                             .eq(org.nep.system.entity.SupervisionFeedback::getStatus, "COMPLETED"));
         } catch (Exception ignored) {}
 
-        addKpiRow(sheet, r++, "AQI 检测总数", String.valueOf(totalDetections), "次", header, data, number);
-        addKpiRow(sheet, r++, "监督反馈总数", String.valueOf(totalFeedbacks), "条", header, data, number);
-        addKpiRow(sheet, r++, "覆盖省份数", String.valueOf(totalProvinces), "个", header, data, number);
-        addKpiRow(sheet, r++, "覆盖城市数", String.valueOf(totalCities), "个", header, data, number);
-        addKpiRow(sheet, r++, "已完成反馈", String.valueOf(completedFeedbacks), "条", header, data, number);
-        addKpiRow(sheet, r++, "待处理反馈", String.valueOf(pendingFeedbacks), "条", header, data, number);
-        addKpiRow(sheet, r++, "城市覆盖率", totalCities > 0 ? Math.round((double) totalCities / 339 * 100) + "%" : "0%", "", header, data, number);
+        // KPI 表格
+        float[] colWidths = {200, 120, 230};
+        Table kpiTable = new Table(UnitValue.createPercentArray(colWidths))
+                .useAllAvailableWidth().setMarginTop(16);
 
-        // 列宽
-        sheet.setColumnWidth(0, 5000);
-        sheet.setColumnWidth(1, 4000);
-        sheet.setColumnWidth(2, 3000);
-        sheet.setColumnWidth(3, 5000);
+        addKpiRow(kpiTable, bodyFont, "AQI 检测总数", String.valueOf(totalDetections), "次");
+        addKpiRow(kpiTable, bodyFont, "监督反馈总数", String.valueOf(totalFeedbacks), "条");
+        addKpiRow(kpiTable, bodyFont, "覆盖省份数", String.valueOf(totalProvinces), "个");
+        addKpiRow(kpiTable, bodyFont, "覆盖城市数", String.valueOf(totalCities), "个");
+        addKpiRow(kpiTable, bodyFont, "已完成反馈", String.valueOf(completedFeedbacks), "条");
+        addKpiRow(kpiTable, bodyFont, "待处理反馈", String.valueOf(pendingFeedbacks), "条");
+        addKpiRow(kpiTable, bodyFont, "城市覆盖率",
+                totalCities > 0 ? Math.round((double) totalCities / 339 * 100) + "%" : "0%", "");
+
+        doc.add(kpiTable);
     }
 
-    // ==================== Sheet 2: 污染热点地图 ====================
+    // ==================== 污染热点地图 ====================
 
-    private void sheetHotspotMap(Workbook wb, CellStyle title, CellStyle header,
-                                  CellStyle data, CellStyle number, CellStyle sub) {
-        Sheet sheet = wb.createSheet("污染热点地图");
-        int r = 0;
+    private void renderHotspotMap(Document doc, PdfFont titleFont, PdfFont bodyFont) {
+        addSectionHeader(doc, titleFont, bodyFont, "污染热点地图", "全国城市AQI分布（近30天）");
 
-        addSheetTitle(sheet, r++, "污染热点地图 - 全国 AQI 分布", title, sub);
-
-        // 表头
-        Row hRow = sheet.createRow(r++);
-        String[] headers = {"省份", "城市", "平均AQI", "最大AQI", "检测次数", "AQI等级", "等级标签"};
-        for (int i = 0; i < headers.length; i++) {
-            Cell c = hRow.createCell(i);
-            c.setCellValue(headers[i]);
-            c.setCellStyle(header);
+        List<Map<String, Object>> cityData = aqiMapper.aggregateByCity30Days();
+        if (cityData.isEmpty()) {
+            doc.add(new Paragraph("暂无数据").setFont(bodyFont).setFontSize(10).setFontColor(COLOR_GRAY)
+                    .setTextAlignment(TextAlignment.CENTER).setMarginTop(20));
+            return;
         }
 
-        // 数据
-        List<Map<String, Object>> cityData = aqiMapper.aggregateByCity30Days();
+        float[] colWidths = {90, 80, 75, 75, 70, 65, 80};
+        Table table = createTable(colWidths);
+        String[] headers = {"城市", "省份", "平均AQI", "最大AQI", "检测次数", "等级", "等级标签"};
+        addTableHeader(table, bodyFont, headers);
+
+        int idx = 0;
         for (Map<String, Object> row : cityData) {
-            Row dRow = sheet.createRow(r++);
-            setCell(dRow, 0, toString(row.get("cityName")), data);
-            setCell(dRow, 1, toString(row.get("provinceName")), data);
-            setCell(dRow, 2, toDouble(row.get("avgAqi")), number);
-            setCell(dRow, 3, toInt(row.get("maxAqi")), number);
-            setCell(dRow, 4, toLong(row.get("detectionCount")), number);
             double avgAqi = toDouble(row.get("avgAqi"));
             int level = MapAqiResult.aqiToLevel(avgAqi);
-            setCell(dRow, 5, level, number);
-            setCell(dRow, 6, MapAqiResult.levelToLabel(level), data);
+            String[] cells = {
+                toString(row.get("cityName")),
+                toString(row.get("provinceName")),
+                formatDouble(avgAqi),
+                String.valueOf(toInt(row.get("maxAqi"))),
+                String.valueOf(toLong(row.get("detectionCount"))),
+                String.valueOf(level),
+                MapAqiResult.levelToLabel(level)
+            };
+            addDataRow(table, bodyFont, cells, idx++);
         }
-
-        if (cityData.isEmpty()) {
-            sheet.createRow(r).createCell(0).setCellValue("暂无数据");
-        }
-
-        // 列宽
-        for (int i = 0; i < 7; i++) sheet.setColumnWidth(i, 4000);
+        doc.add(table);
     }
 
-    // ==================== Sheet 3: AQI 等级分布 ====================
+    // ==================== AQI 等级分布 ====================
 
-    private void sheetAqiDistribution(Workbook wb, CellStyle title, CellStyle header,
-                                       CellStyle data, CellStyle number, CellStyle sub) {
-        Sheet sheet = wb.createSheet("AQI等级分布");
-        int r = 0;
-        addSheetTitle(sheet, r++, "AQI 等级分布统计", title, sub);
-
-        Row hRow = sheet.createRow(r++);
-        String[] headers = {"等级", "名称", "AQI范围", "检测次数", "占比"};
-        for (int i = 0; i < headers.length; i++) {
-            Cell c = hRow.createCell(i);
-            c.setCellValue(headers[i]);
-            c.setCellStyle(header);
-        }
+    private void renderAqiDistribution(Document doc, PdfFont titleFont, PdfFont bodyFont) {
+        addSectionHeader(doc, titleFont, bodyFont, "AQI等级分布", "按国家AQI标准六等级划分");
 
         String[] names = {"优", "良", "轻度污染", "中度污染", "重度污染", "严重污染"};
         int[] rangesLow = {0, 51, 101, 151, 201, 301};
         int[] rangesHigh = {50, 100, 150, 200, 300, Integer.MAX_VALUE};
         long total = aqiMapper.selectCount(null);
+
+        float[] colWidths = {50, 100, 100, 100, 80};
+        Table table = createTable(colWidths);
+        String[] headers = {"等级", "名称", "AQI范围", "检测次数", "占比"};
+        addTableHeader(table, bodyFont, headers);
 
         for (int i = 0; i < 6; i++) {
             long count;
@@ -213,111 +261,97 @@ public class SpatialReportService {
                                 .ge(AqiDetection::getFinalAqi, rangesLow[i])
                                 .le(AqiDetection::getFinalAqi, rangesHigh[i]));
             }
-            Row dRow = sheet.createRow(r++);
-            setCell(dRow, 0, i + 1, number);
-            setCell(dRow, 1, names[i], data);
-            setCell(dRow, 2, rangesLow[i] + (i < 5 ? "-" + rangesHigh[i] : "+"), data);
-            setCell(dRow, 3, count, number);
-            setCell(dRow, 4, total > 0 ? Math.round((double) count / total * 100) + "%" : "0%", data);
+            String[] cells = {
+                String.valueOf(i + 1),
+                names[i],
+                rangesLow[i] + (i < 5 ? "-" + rangesHigh[i] : "+"),
+                String.valueOf(count),
+                total > 0 ? Math.round((double) count / total * 100) + "%" : "0%"
+            };
+            addDataRow(table, bodyFont, cells, i, AQI_COLORS[i]);
         }
-
-        for (int i = 0; i < 5; i++) sheet.setColumnWidth(i, 4000);
+        doc.add(table);
     }
 
-    // ==================== Sheet 4: 反馈状态分布 ====================
+    // ==================== 反馈状态分布 ====================
 
-    private void sheetFeedbackStatus(Workbook wb, CellStyle title, CellStyle header,
-                                      CellStyle data, CellStyle number, CellStyle sub) {
-        Sheet sheet = wb.createSheet("反馈状态分布");
-        int r = 0;
-        addSheetTitle(sheet, r++, "反馈工单状态分布", title, sub);
-
-        Row hRow = sheet.createRow(r++);
-        String[] headers = {"状态", "说明", "数量"};
-        for (int i = 0; i < headers.length; i++) {
-            Cell c = hRow.createCell(i);
-            c.setCellValue(headers[i]);
-            c.setCellStyle(header);
-        }
+    private void renderFeedbackStatus(Document doc, PdfFont titleFont, PdfFont bodyFont) {
+        addSectionHeader(doc, titleFont, bodyFont, "反馈状态分布", "监督反馈工单各状态统计");
 
         String[][] statuses = {
-                {"PENDING", "待指派"},
-                {"ASSIGNED", "已指派/处理中"},
-                {"COMPLETED", "已完成"},
-                {"ESCALATED", "已升级/催办"},
-                {"REJECTED", "已拒绝"}
+            {"PENDING", "待指派"},
+            {"ASSIGNED", "已指派/处理中"},
+            {"COMPLETED", "已完成"},
+            {"ESCALATED", "已升级/催办"},
+            {"REJECTED", "已拒绝"}
         };
 
+        float[] colWidths = {120, 200, 100};
+        Table table = createTable(colWidths);
+        String[] headers = {"状态编码", "说明", "数量"};
+        addTableHeader(table, bodyFont, headers);
+
+        int idx = 0;
         try {
             for (String[] s : statuses) {
                 long count = feedbackMapper.selectCount(
                         new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<
                                 org.nep.system.entity.SupervisionFeedback>()
                                 .eq(org.nep.system.entity.SupervisionFeedback::getStatus, s[0]));
-                Row dRow = sheet.createRow(r++);
-                setCell(dRow, 0, s[0], data);
-                setCell(dRow, 1, s[1], data);
-                setCell(dRow, 2, count, number);
+                String[] cells = {s[0], s[1], String.valueOf(count)};
+                addDataRow(table, bodyFont, cells, idx++);
             }
         } catch (Exception e) {
-            sheet.createRow(r).createCell(0).setCellValue("反馈数据暂不可用");
+            doc.add(new Paragraph("反馈数据暂不可用").setFont(bodyFont).setFontSize(10)
+                    .setFontColor(COLOR_GRAY).setMarginTop(12));
+            return;
         }
-
-        for (int i = 0; i < 3; i++) sheet.setColumnWidth(i, 5000);
+        doc.add(table);
     }
 
-    // ==================== Sheet 5: 各省份统计 ====================
+    // ==================== 各省份统计 ====================
 
-    private void sheetProvinceStats(Workbook wb, CellStyle title, CellStyle header,
-                                     CellStyle data, CellStyle number, CellStyle sub) {
-        Sheet sheet = wb.createSheet("各省份统计");
-        int r = 0;
-        addSheetTitle(sheet, r++, "各省份 AQI 与检测统计（近30天）", title, sub);
-
-        Row hRow = sheet.createRow(r++);
-        String[] headers = {"排名", "省份", "平均AQI", "最大AQI", "检测次数", "覆盖城市", "等级"};
-        for (int i = 0; i < headers.length; i++) {
-            Cell c = hRow.createCell(i);
-            c.setCellValue(headers[i]);
-            c.setCellStyle(header);
-        }
+    private void renderProvinceStats(Document doc, PdfFont titleFont, PdfFont bodyFont) {
+        addSectionHeader(doc, titleFont, bodyFont, "各省份统计", "各省份AQI与检测统计（近30天，按平均AQI降序）");
 
         List<Map<String, Object>> rows = aqiMapper.aggregateByProvince30Days();
-        int rank = 1;
-        for (Map<String, Object> row : rows) {
-            Row dRow = sheet.createRow(r++);
-            double avgAqi = toDouble(row.get("avgAqi"));
-            setCell(dRow, 0, rank++, number);
-            setCell(dRow, 1, toString(row.get("provinceName")), data);
-            setCell(dRow, 2, avgAqi, number);
-            setCell(dRow, 3, toInt(row.get("maxAqi")), number);
-            setCell(dRow, 4, toLong(row.get("totalDetections")), number);
-            setCell(dRow, 5, toInt(row.get("cityCount")), number);
-            setCell(dRow, 6, MapAqiResult.levelToLabel(MapAqiResult.aqiToLevel(avgAqi)), data);
-        }
-
         if (rows.isEmpty()) {
-            sheet.createRow(r).createCell(0).setCellValue("暂无数据");
+            doc.add(new Paragraph("暂无数据").setFont(bodyFont).setFontSize(10).setFontColor(COLOR_GRAY)
+                    .setTextAlignment(TextAlignment.CENTER).setMarginTop(20));
+            return;
         }
 
-        for (int i = 0; i < 7; i++) sheet.setColumnWidth(i, 4000);
+        float[] colWidths = {40, 80, 75, 75, 75, 70, 80};
+        Table table = createTable(colWidths);
+        String[] headers = {"#", "省份", "平均AQI", "最大AQI", "检测次数", "覆盖城市", "等级"};
+        addTableHeader(table, bodyFont, headers);
+
+        int rank = 1, idx = 0;
+        for (Map<String, Object> row : rows) {
+            double avgAqi = toDouble(row.get("avgAqi"));
+            String[] cells = {
+                String.valueOf(rank++),
+                toString(row.get("provinceName")),
+                formatDouble(avgAqi),
+                String.valueOf(toInt(row.get("maxAqi"))),
+                String.valueOf(toLong(row.get("totalDetections"))),
+                String.valueOf(toInt(row.get("cityCount"))),
+                MapAqiResult.levelToLabel(MapAqiResult.aqiToLevel(avgAqi))
+            };
+            addDataRow(table, bodyFont, cells, idx++);
+        }
+        doc.add(table);
     }
 
-    // ==================== Sheet 6: 月度趋势 ====================
+    // ==================== 月度趋势 ====================
 
-    private void sheetMonthlyTrend(Workbook wb, CellStyle title, CellStyle header,
-                                    CellStyle data, CellStyle number, CellStyle sub) {
-        Sheet sheet = wb.createSheet("月度趋势");
-        int r = 0;
-        addSheetTitle(sheet, r++, "AQI 检测月度趋势（近12个月）", title, sub);
+    private void renderMonthlyTrend(Document doc, PdfFont titleFont, PdfFont bodyFont) {
+        addSectionHeader(doc, titleFont, bodyFont, "月度趋势", "AQI检测月度统计（近12个月）");
 
-        Row hRow = sheet.createRow(r++);
+        float[] colWidths = {180, 160, 160};
+        Table table = createTable(colWidths);
         String[] headers = {"月份", "检测次数", "环比变化"};
-        for (int i = 0; i < headers.length; i++) {
-            Cell c = hRow.createCell(i);
-            c.setCellValue(headers[i]);
-            c.setCellStyle(header);
-        }
+        addTableHeader(table, bodyFont, headers);
 
         LocalDateTime now = LocalDateTime.now();
         long prevCount = -1;
@@ -329,138 +363,172 @@ public class SpatialReportService {
                             .ge(AqiDetection::getDetectionTime, monthStart.format(DT_FMT))
                             .lt(AqiDetection::getDetectionTime, monthEnd.format(DT_FMT)));
 
-            Row dRow = sheet.createRow(r++);
-            setCell(dRow, 0, monthStart.getYear() + "-" + String.format("%02d", monthStart.getMonthValue()), data);
-            setCell(dRow, 1, count, number);
+            String change;
             if (prevCount >= 0 && prevCount > 0) {
-                setCell(dRow, 2, Math.round((double)(count - prevCount) / prevCount * 100) + "%", data);
+                change = Math.round((double)(count - prevCount) / prevCount * 100) + "%";
             } else {
-                setCell(dRow, 2, "-", data);
+                change = "-";
             }
+            String[] cells = {
+                monthStart.getYear() + "-" + String.format("%02d", monthStart.getMonthValue()),
+                String.valueOf(count),
+                change
+            };
+            addDataRow(table, bodyFont, cells, i); // i as index for stripe
             prevCount = count;
         }
-
-        for (int i = 0; i < 3; i++) sheet.setColumnWidth(i, 4000);
+        doc.add(table);
     }
 
-    // ==================== 样式 ====================
+    // ==================== 样式工具方法 ====================
 
-    private CellStyle createTitleStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont();
-        f.setFontName("Microsoft YaHei");
-        f.setBold(true);
-        f.setFontHeightInPoints((short) 16);
-        f.setColor(IndexedColors.DARK_BLUE.getIndex());
-        s.setFont(f);
-        s.setAlignment(HorizontalAlignment.CENTER);
-        s.setVerticalAlignment(VerticalAlignment.CENTER);
-        return s;
+    /** 章节标题 */
+    private void addSectionHeader(Document doc, PdfFont titleFont, PdfFont bodyFont,
+                                   String title, String desc) {
+        Paragraph t = new Paragraph(title)
+                .setFont(titleFont).setFontSize(16).setFontColor(COLOR_DARK)
+                .setMarginBottom(2);
+        doc.add(t);
+
+        Paragraph d = new Paragraph(desc)
+                .setFont(bodyFont).setFontSize(9).setFontColor(COLOR_GRAY)
+                .setMarginBottom(4);
+        doc.add(d);
+
+        Paragraph genTime = new Paragraph("生成时间: " + LocalDateTime.now().format(DT_FMT))
+                .setFont(bodyFont).setFontSize(8).setFontColor(COLOR_GRAY)
+                .setMarginBottom(10);
+        doc.add(genTime);
     }
 
-    private CellStyle createSubtitleStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont();
-        f.setFontName("Microsoft YaHei");
-        f.setFontHeightInPoints((short) 10);
-        f.setColor(IndexedColors.GREY_50_PERCENT.getIndex());
-        s.setFont(f);
-        return s;
+    /** 创建基础表格 */
+    private Table createTable(float[] colWidths) {
+        return new Table(UnitValue.createPercentArray(colWidths))
+                .useAllAvailableWidth()
+                .setMarginBottom(16);
     }
 
-    private CellStyle createHeaderStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont();
-        f.setFontName("Microsoft YaHei");
-        f.setBold(true);
-        f.setFontHeightInPoints((short) 11);
-        f.setColor(IndexedColors.WHITE.getIndex());
-        s.setFont(f);
-        s.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
-        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        s.setAlignment(HorizontalAlignment.CENTER);
-        s.setVerticalAlignment(VerticalAlignment.CENTER);
-        s.setBorderTop(BorderStyle.THIN);
-        s.setBorderBottom(BorderStyle.THIN);
-        s.setBorderLeft(BorderStyle.THIN);
-        s.setBorderRight(BorderStyle.THIN);
-        return s;
+    /** 表头行 */
+    private void addTableHeader(Table table, PdfFont font, String[] headers) {
+        for (String h : headers) {
+            Cell cell = new Cell()
+                    .add(new Paragraph(h).setFont(font).setFontSize(9).setFontColor(ColorConstants.WHITE))
+                    .setBackgroundColor(COLOR_HEADER_BG)
+                    .setBorder(Border.NO_BORDER)
+                    .setPadding(6)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setVerticalAlignment(VerticalAlignment.MIDDLE);
+            table.addHeaderCell(cell);
+        }
     }
 
-    private CellStyle createDataStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont();
-        f.setFontName("Microsoft YaHei");
-        f.setFontHeightInPoints((short) 10);
-        s.setFont(f);
-        s.setAlignment(HorizontalAlignment.LEFT);
-        s.setVerticalAlignment(VerticalAlignment.CENTER);
-        s.setBorderTop(BorderStyle.THIN);
-        s.setBorderBottom(BorderStyle.THIN);
-        s.setBorderLeft(BorderStyle.THIN);
-        s.setBorderRight(BorderStyle.THIN);
-        return s;
+    /** 数据行（带斑马纹） */
+    private void addDataRow(Table table, PdfFont font, String[] cells, int index) {
+        addDataRow(table, font, cells, index, null);
     }
 
-    private CellStyle createNumberStyle(Workbook wb) {
-        CellStyle s = createDataStyle(wb);
-        s.setAlignment(HorizontalAlignment.CENTER);
-        return s;
+    /** 数据行（带斑马纹和可选Aqi颜色标识） */
+    private void addDataRow(Table table, PdfFont font, String[] cells, int index, DeviceRgb accentColor) {
+        DeviceRgb bg = (index % 2 == 0) ? null : COLOR_STRIPE;
+        for (int i = 0; i < cells.length; i++) {
+            DeviceRgb textColor = COLOR_TEXT;
+            // 如果是AQI等级列（第一列是等级号），用颜色标记
+            if (accentColor != null && i == 0) {
+                textColor = accentColor;
+            }
+            Cell cell = new Cell()
+                    .add(new Paragraph(cells[i]).setFont(font).setFontSize(8.5f).setFontColor(textColor))
+                    .setBorder(Border.NO_BORDER)
+                    .setBorderBottom(new com.itextpdf.layout.borders.SolidBorder(
+                            new DeviceRgb(230, 230, 230), 0.5f))
+                    .setPadding(5)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setVerticalAlignment(VerticalAlignment.MIDDLE);
+            if (bg != null) {
+                cell.setBackgroundColor(bg);
+            }
+            table.addCell(cell);
+        }
     }
 
-    // ==================== 工具方法 ====================
+    /** KPI 行 */
+    private void addKpiRow(Table table, PdfFont font, String label, String value, String unit) {
+        Cell labelCell = new Cell()
+                .add(new Paragraph(label).setFont(font).setFontSize(11).setFontColor(COLOR_DARK))
+                .setBorder(Border.NO_BORDER)
+                .setBorderBottom(new com.itextpdf.layout.borders.SolidBorder(
+                        new DeviceRgb(230, 230, 230), 0.5f))
+                .setPadding(8)
+                .setTextAlignment(TextAlignment.RIGHT);
+        table.addCell(labelCell);
 
-    private void addSheetTitle(Sheet sheet, int row, String titleText, CellStyle title, CellStyle sub) {
-        Row tRow = sheet.createRow(row);
-        tRow.createCell(0).setCellValue(titleText);
-        tRow.getCell(0).setCellStyle(title);
-        sheet.addMergedRegion(new CellRangeAddress(row, row, 0, 6));
-        tRow.setHeightInPoints(24);
+        Cell valueCell = new Cell()
+                .add(new Paragraph(value).setFont(font).setFontSize(14).setFontColor(COLOR_PRIMARY))
+                .setBorder(Border.NO_BORDER)
+                .setBorderBottom(new com.itextpdf.layout.borders.SolidBorder(
+                        new DeviceRgb(230, 230, 230), 0.5f))
+                .setPadding(8)
+                .setTextAlignment(TextAlignment.CENTER);
+        table.addCell(valueCell);
 
-        Row timeRow = sheet.createRow(row + 1);
-        timeRow.createCell(0).setCellValue("生成时间: " + LocalDateTime.now().format(DT_FMT));
-        timeRow.getCell(0).setCellStyle(sub);
-        sheet.addMergedRegion(new CellRangeAddress(row + 1, row + 1, 0, 6));
-
-        // 跳过标题行 + 时间行，返回新行号
-        sheet.createRow(row + 2); // 空行
+        Cell unitCell = new Cell()
+                .add(new Paragraph(unit).setFont(font).setFontSize(10).setFontColor(COLOR_GRAY))
+                .setBorder(Border.NO_BORDER)
+                .setBorderBottom(new com.itextpdf.layout.borders.SolidBorder(
+                        new DeviceRgb(230, 230, 230), 0.5f))
+                .setPadding(8);
+        table.addCell(unitCell);
     }
 
-    private void addKpiRow(Sheet sheet, int row, String label, String value, String unit,
-                           CellStyle header, CellStyle data, CellStyle number) {
-        Row r = sheet.createRow(row);
-        setCell(r, 0, label, header);
-        setCell(r, 1, value, number);
-        setCell(r, 2, unit, data);
+    /** 分隔线组件 */
+    private Divider createDivider() {
+        return new Divider();
     }
 
-    private void setCell(Row row, int col, String value, CellStyle style) {
-        Cell c = row.createCell(col);
-        c.setCellValue(value != null ? value : "");
-        c.setCellStyle(style);
+    // ==================== 字体加载 ====================
+
+    private PdfFont loadFont(String name, String encoding) {
+        try {
+            return PdfFontFactory.createFont(name, encoding, PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED);
+        } catch (Exception e) {
+            // 回退：尝试系统字体
+            try {
+                String os = System.getProperty("os.name").toLowerCase();
+                if (os.contains("win")) {
+                    return PdfFontFactory.createFont("c:/windows/fonts/simsun.ttc,0",
+                            com.itextpdf.io.font.PdfEncodings.IDENTITY_H);
+                } else if (os.contains("mac")) {
+                    return PdfFontFactory.createFont(
+                            "/System/Library/Fonts/STHeiti Light.ttc,0",
+                            com.itextpdf.io.font.PdfEncodings.IDENTITY_H);
+                }
+            } catch (Exception ignored) {}
+            // 最终回退：Helvetica（西文only，中文会是方块）
+            log.warn("无法加载中文字体，报告中的中文可能无法正常显示");
+            try {
+                return PdfFontFactory.createFont();
+            } catch (java.io.IOException ex) {
+                throw new RuntimeException("无法创建任何字体", ex);
+            }
+        }
     }
 
-    private void setCell(Row row, int col, double value, CellStyle style) {
-        Cell c = row.createCell(col);
-        c.setCellValue(value);
-        c.setCellStyle(style);
-    }
+    // ==================== 分隔线内部类 ====================
 
-    private void setCell(Row row, int col, long value, CellStyle style) {
-        Cell c = row.createCell(col);
-        c.setCellValue(value);
-        c.setCellStyle(style);
-    }
-
-    private void setCell(Row row, int col, int value, CellStyle style) {
-        Cell c = row.createCell(col);
-        c.setCellValue(value);
-        c.setCellStyle(style);
+    private static class Divider extends Paragraph {
+        Divider() {
+            super(new Text("─".repeat(60))
+                    .setFontColor(new DeviceRgb(220, 220, 220))
+                    .setFontSize(8));
+            setMarginBottom(0);
+            setMarginTop(0);
+        }
     }
 
     // ==================== 类型转换 ====================
 
     private String toString(Object obj) { return obj != null ? obj.toString() : ""; }
+    private String formatDouble(double v) { return v == (long) v ? String.valueOf((long) v) : String.format("%.1f", v); }
     private double toDouble(Object obj) {
         if (obj == null) return 0.0;
         if (obj instanceof Number n) return n.doubleValue();

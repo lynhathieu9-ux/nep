@@ -22,10 +22,10 @@ import java.util.Map;
 /**
  * 报表导出控制器
  * <p>
- * 提供多种格式的空间分析报告下载：
+ * 提供 PDF 格式的空间分析报告下载：
  * <ul>
- *   <li>空间分析报告 (Excel) - /api/export/spatial-report</li>
- *   <li>反馈数据导出 (Excel) - /api/export/feedback</li>
+ *   <li>空间分析报告 (PDF) - /api/export/spatial-report</li>
+ *   <li>反馈数据导出 (PDF) - /api/export/feedback</li>
  * </ul>
  *
  * @author NEP Team
@@ -41,44 +41,42 @@ public class ExportController {
 
     // ==================== 空间分析报告 ====================
 
-    @Operation(summary = "导出空间分析报告 (Excel)")
+    @Operation(summary = "导出空间分析报告 (PDF)")
     @GetMapping("/spatial-report")
     public ResponseEntity<byte[]> exportSpatialReport() {
         log.info("收到空间分析报告导出请求");
 
         byte[] reportBytes = reportService.generateReport();
 
-        String filename = "NEP空间分析报告_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
+        String filename = "NEP空间分析报告_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".pdf";
         String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8)
                 .replaceAll("\\+", "%20");
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename*=UTF-8''" + encodedFilename)
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentType(MediaType.APPLICATION_PDF)
                 .contentLength(reportBytes.length)
                 .body(reportBytes);
     }
 
     // ==================== 反馈数据导出 ====================
 
-    @Operation(summary = "导出反馈数据 (Excel)")
+    @Operation(summary = "导出反馈数据 (PDF)")
     @GetMapping("/feedback")
     public ResponseEntity<byte[]> exportFeedback() {
         log.info("收到反馈数据导出请求");
 
-        byte[] reportBytes = reportService.generateReport(); // 复用完整报告
+        byte[] reportBytes = reportService.generateReport();
 
-        String filename = "NEP反馈数据_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
+        String filename = "NEP反馈数据_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".pdf";
         String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8)
                 .replaceAll("\\+", "%20");
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename*=UTF-8''" + encodedFilename)
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentType(MediaType.APPLICATION_PDF)
                 .contentLength(reportBytes.length)
                 .body(reportBytes);
     }
@@ -88,7 +86,7 @@ public class ExportController {
     public Result<Map<String, Object>> exportStatus() {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("available", true);
-        info.put("formats", new String[]{"Excel (.xlsx)"});
+        info.put("formats", new String[]{"PDF (.pdf)"});
         info.put("reportTypes", new String[]{"空间分析报告", "反馈数据报告"});
         info.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         return Result.ok(info);
