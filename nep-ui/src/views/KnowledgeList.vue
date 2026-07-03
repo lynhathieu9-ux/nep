@@ -57,8 +57,11 @@
             @click="$router.push(rolePath(`/knowledge/${doc.id}`))"
           >
             <div class="col-icon">
-              <div class="format-badge" :class="getFileFormat(doc.fileName)">
-                {{ getFileFormat(doc.fileName) }}
+              <div class="cover-thumb" v-if="doc.coverImage">
+                <img :src="doc.coverImage" alt="封面" />
+              </div>
+              <div class="format-badge" v-else :class="getFileFormat(doc.attachmentUrl)">
+                {{ getFileFormat(doc.attachmentUrl) }}
               </div>
             </div>
             
@@ -97,7 +100,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getKnowledgePage } from '@/api/knowledge'
+import { getKnowledgePage, downloadKnowledgeFile } from '@/api/knowledge'
 import { rolePath } from '@/utils/roleRouter'
 import { Search, RefreshRight, View, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -111,14 +114,21 @@ const total = ref(0)
 const filterType = ref('')
 const searchQuery = ref('')
 
-// 辅助方法：通过文件名获取后缀
-function getFileFormat(fileName) {
-  if (!fileName) return 'DOC'
-  const ext = fileName.split('.').pop().toLowerCase()
+// 辅助方法：从附件URL获取文件后缀标签
+function getFileFormat(rawUrl) {
+  if (!rawUrl) return 'DOC'
+  // 支持 JSON 数组 → 取第一个附件展示
+  let url = rawUrl
+  try {
+    const arr = JSON.parse(rawUrl)
+    if (Array.isArray(arr) && arr.length > 0) url = arr[0]
+  } catch { /* 单个URL直接用 */ }
+  const ext = url.split('.').pop()?.toLowerCase() || ''
   if (['pdf'].includes(ext)) return 'PDF'
   if (['xls', 'xlsx'].includes(ext)) return 'XLS'
   if (['doc', 'docx'].includes(ext)) return 'DOC'
-  return 'TXT'
+  if (['zip', 'rar', '7z'].includes(ext)) return 'ZIP'
+  return 'DOC'
 }
 
 function typeLabel(type) {
@@ -144,9 +154,44 @@ function handleReset() {
   handleSearch()
 }
 
-function downloadDoc(doc) {
-  ElMessage.success(`开始下载文献: ${doc.title}`)
-  // 这里接入真实的附件下载逻辑
+async function downloadDoc(doc) {
+  if (!doc.attachmentUrl) {
+    ElMessage.warning('该文献暂无可下载的附件')
+    return
+  }
+  // 解析附件（JSON 数组或单个URL）
+  const urls = parseAttachUrls(doc.attachmentUrl)
+  if (urls.length === 0) {
+    ElMessage.warning('该文献暂无可下载的附件')
+    return
+  }
+  // 只有一个附件 → 直接下载；多个 → 下载第一个（用户可进详情页逐个下载）
+  const url = urls[0]
+  const filename = url.split('/').pop() || doc.title
+  try {
+    const blob = await downloadKnowledgeFile(url, filename)
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    a.click()
+    ElMessage.success('附件下载成功')
+  } catch (e) {
+    ElMessage.error('下载失败，附件可能不存在')
+  }
+}
+
+function parseAttachUrls(raw) {
+  if (!raw) return []
+  try {
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return [typeof arr === 'string' ? arr : (arr?.url || '')]
+    return arr.filter(Boolean).map(item =>
+      typeof item === 'object' && item.url ? item.url :
+      typeof item === 'string' ? item : ''
+    ).filter(Boolean)
+  } catch {
+    return [raw]
+  }
 }
 
 async function fetchKnowledge() {
@@ -210,6 +255,15 @@ onMounted(() => fetchKnowledge())
 }
 .document-row:last-child { border-bottom: none; }
 .document-row:hover { background: rgba(255, 255, 255, 0.8); transform: scale(1.005); box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.04); padding: 16px; margin: 0 -16px; }
+
+/* 封面缩略图 */
+.cover-thumb {
+  width: 52px; height: 36px; border-radius: 6px; overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.cover-thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+}
 
 /* 拟物化微标 */
 .format-badge {

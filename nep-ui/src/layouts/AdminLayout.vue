@@ -43,10 +43,10 @@
           </router-link>
         </el-tooltip>
 
-        <el-tooltip content="全量监督流转" placement="right" :disabled="!isCollapsed" popper-class="alpine-tooltip">
+        <el-tooltip content="反馈工单管理" placement="right" :disabled="!isCollapsed" popper-class="alpine-tooltip">
           <router-link to="/admin/feedbacks" class="nav-item" active-class="is-active">
             <el-icon class="nav-icon"><Tickets /></el-icon>
-            <span class="nav-text">全量监督流转</span>
+            <span class="nav-text">反馈工单管理</span>
           </router-link>
         </el-tooltip>
 
@@ -59,10 +59,10 @@
           </router-link>
         </el-tooltip>
 
-        <el-tooltip content="知识库与规章" placement="right" :disabled="!isCollapsed" popper-class="alpine-tooltip">
+        <el-tooltip content="文献发布管理" placement="right" :disabled="!isCollapsed" popper-class="alpine-tooltip">
           <router-link to="/admin/knowledge" class="nav-item" active-class="is-active">
             <el-icon class="nav-icon"><Collection /></el-icon>
-            <span class="nav-text">知识库与规章</span>
+            <span class="nav-text">文献发布管理</span>
           </router-link>
         </el-tooltip>
       </nav>
@@ -96,28 +96,37 @@
     <!-- 3. 右侧核心舞台 (Main Canvas) -->
     <main class="main-canvas">
       
-      <!-- 【核心重构 1】去除冗余标题，改为极简的系统状态悬浮带 -->
+      <!-- 实时业务状态栏 -->
       <header class="utility-strip">
         <div class="strip-left">
           <div class="system-status">
             <div class="pulse-dot"></div>
-            <span class="status-text">NEP Core Engine v2.0 · 运行平稳</span>
+            <span class="status-text">NEP Core Engine · 运行平稳</span>
           </div>
         </div>
         <div class="strip-right">
-          <!-- 真实的唤出式调度器 -->
-          <button class="command-trigger" @click="openCmdPalette" title="或按下 ⌘K / Ctrl+K">
-            <el-icon><Search /></el-icon>
-            <span>全局系统调度</span>
-            <kbd>⌘ K</kbd>
-          </button>
-          <button class="utility-btn" title="系统通知">
+          <!-- 待处理任务指示器 -->
+          <div class="indicator-group">
+            <div class="indicator warn" @click="goToFeedbacks('PENDING')" :class="{ 'is-focus': route.path === '/admin/feedbacks' }" title="查看待指派反馈">
+              <span class="indicator-count">{{ pendingCount }}</span>
+              <span class="indicator-label">待指派</span>
+            </div>
+            <div class="indicator danger" @click="goToFeedbacks('ESCALATED')" :class="{ 'is-focus': route.path === '/admin/feedbacks' }" title="超时未处理的紧急工单">
+              <span class="indicator-count">{{ escalatedCount }}</span>
+              <span class="indicator-label">超时预警</span>
+            </div>
+            <div class="indicator" @click="navTo('/admin/users')" title="系统用户">
+              <span class="indicator-count">{{ userCount }}</span>
+              <span class="indicator-label">用户</span>
+            </div>
+          </div>
+          <button class="utility-btn" title="系统通知" @click="navTo('/admin/notifications')">
             <el-icon><Bell /></el-icon>
           </button>
         </div>
       </header>
 
-      <!-- 【核心重构 2】去除多余玻璃框，全权交给独立页面的容器 -->
+      <!-- 页面视口 -->
       <div class="viewport-wrapper">
         <router-view v-slot="{ Component, route }">
           <transition name="spatial-fade" mode="out-in">
@@ -130,67 +139,20 @@
 
     </main>
 
-    <!-- 【核心重构 3】全局命令控制台 (Command Palette) -->
-    <transition name="cmd-fade">
-      <div class="cmd-overlay" v-if="cmdVisible" @click.self="closeCmdPalette">
-        <div class="cmd-palette glass-cmd">
-          
-          <div class="cmd-header">
-            <el-icon class="cmd-search-icon"><Search /></el-icon>
-            <input 
-              ref="cmdInput"
-              v-model="cmdQuery" 
-              class="cmd-input" 
-              placeholder="搜索功能模块、输入快捷指令..." 
-              @keyup.esc="closeCmdPalette"
-            >
-            <div class="cmd-hint"><kbd>ESC</kbd> 退出</div>
-          </div>
-
-          <div class="cmd-body">
-            <div class="cmd-group">
-              <div class="cmd-group-title">建议操作</div>
-              <div class="cmd-option" @click="navTo('/admin/feedbacks')">
-                <div class="cmd-icon-box"><el-icon><Position /></el-icon></div>
-                <div class="cmd-option-text">指派最新流转工单</div>
-                <el-icon class="cmd-enter-icon"><TopRight /></el-icon>
-              </div>
-              <div class="cmd-option" @click="navTo('/admin/users')">
-                <div class="cmd-icon-box"><el-icon><User /></el-icon></div>
-                <div class="cmd-option-text">管理账户与权限</div>
-                <el-icon class="cmd-enter-icon"><TopRight /></el-icon>
-              </div>
-              <div class="cmd-option" @click="navTo('/admin/news')">
-                <div class="cmd-icon-box"><el-icon><Edit /></el-icon></div>
-                <div class="cmd-option-text">发布环保资讯或系统公告</div>
-                <el-icon class="cmd-enter-icon"><TopRight /></el-icon>
-              </div>
-            </div>
-
-            <div class="cmd-group" v-if="cmdQuery">
-              <div class="cmd-group-title">检索结果</div>
-              <div class="cmd-option empty-search">
-                对不起，全局业务数据搜索引擎尚未并网。
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </transition>
-
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessageBox } from 'element-plus'
+import { getFeedbackOverview } from '@/api/feedback'
+import { getUserStats } from '@/api/user'
 import {
-  Platform, Odometer, DataAnalysis, User, Tickets, 
-  Reading, Collection, UserFilled, Setting, SwitchButton, 
-  Fold, Expand, Search, Bell, Position, TopRight, Edit
+  Platform, Odometer, DataAnalysis, User, Tickets,
+  Reading, Collection, UserFilled, Setting, SwitchButton,
+  Fold, Expand, Bell
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -205,10 +167,11 @@ const toggleSidebar = () => {
   isCollapsed.value = !isCollapsed.value
 }
 
-// 通用跳转
-const navTo = (path) => {
-  cmdVisible.value = false
-  router.push(path)
+const navTo = (path) => router.push(path)
+
+// 跳转到反馈工单页并自动筛选（直接用 URL 参数驱动）
+function goToFeedbacks(status) {
+  router.push({ path: '/admin/feedbacks', query: { status } })
 }
 
 // 登出逻辑
@@ -224,45 +187,39 @@ const handleLogout = () => {
   }).catch(() => {})
 }
 
-// ==================== 全局命令控制台 (Command Palette) 逻辑 ====================
-const cmdVisible = ref(false)
-const cmdQuery = ref('')
-const cmdInput = ref(null)
+// ===== 实时业务指标 =====
+const pendingCount = ref(0)     // 待指派反馈数
+const escalatedCount = ref(0)  // 已升级工单数
+const userCount = ref(0)       // 系统用户数
+let refreshTimer = null
 
-const openCmdPalette = () => {
-  cmdQuery.value = ''
-  cmdVisible.value = true
+async function loadIndicators() {
+  try {
+    // 反馈总览
+    const overview = await getFeedbackOverview()
+    if (overview.data) {
+      pendingCount.value = overview.data.pending || 0
+      escalatedCount.value = overview.data.escalated || 0
+    }
+  } catch (e) { /* 静默 */ }
+  try {
+    // 用户统计
+    const stats = await getUserStats()
+    if (stats.data) {
+      userCount.value = stats.data.total || 0
+    }
+  } catch (e) { /* 静默 */ }
 }
-
-const closeCmdPalette = () => {
-  cmdVisible.value = false
-}
-
-// 监听快捷键 (Cmd+K 或 Ctrl+K)
-const handleKeydown = (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-    e.preventDefault()
-    if (cmdVisible.value) closeCmdPalette()
-    else openCmdPalette()
-  }
-}
-
-// 弹窗出现时自动聚焦输入框
-watch(cmdVisible, (val) => {
-  if (val) {
-    setTimeout(() => {
-      cmdInput.value?.focus()
-    }, 50)
-  }
-})
 
 onMounted(() => {
   if (!userStore.user) userStore.fetchUser()
-  window.addEventListener('keydown', handleKeydown)
+  loadIndicators()
+  // 每 30 秒刷新一次业务指标
+  refreshTimer = setInterval(loadIndicators, 30_000)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
@@ -390,17 +347,40 @@ onUnmounted(() => {
 .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: #2AA876; box-shadow: 0 0 0 0 rgba(42, 168, 118, 0.4); animation: pulse-green 2s infinite; }
 @keyframes pulse-green { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(42, 168, 118, 0.4); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(42, 168, 118, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(42, 168, 118, 0); } }
 
-.strip-right { display: flex; align-items: center; gap: 16px; }
+.strip-right { display: flex; align-items: center; gap: 20px; }
 
-/* 极其隐喻的 Command 触发器 */
-.command-trigger {
-  display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 12px;
-  background: rgba(28, 36, 33, 0.04); border: 1px solid rgba(28, 36, 33, 0.06);
-  border-radius: 10px; cursor: pointer; color: #74807B; transition: all 0.3s;
+/* 实时业务指标胶囊 */
+.indicator-group {
+  display: flex; align-items: center; gap: 2px;
+  background: rgba(28, 36, 33, 0.03);
+  border: 1px solid rgba(28, 36, 33, 0.05);
+  border-radius: 12px; padding: 2px;
 }
-.command-trigger:hover { background: rgba(255, 255, 255, 0.6); box-shadow: 0 2px 8px rgba(0,0,0,0.02); color: #1C2421; }
-.command-trigger span { font-size: 13px; font-weight: 500; width: 100px; text-align: left;}
-.command-trigger kbd { font-size: 11px; font-weight: 700; background: white; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(28,36,33,0.1); color: #1C2421; }
+.indicator {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 14px; border-radius: 10px; cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border: 1px solid transparent;
+}
+.indicator:hover {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+.indicator-count {
+  font-size: 18px; font-weight: 700; color: #1C2421;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.indicator-label {
+  font-size: 11px; font-weight: 600; color: #74807B;
+  letter-spacing: 0.3px;
+}
+.indicator.warn .indicator-count { color: #F5A623; }
+.indicator.danger .indicator-count { color: #E11D48; }
+.indicator.is-focus {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(28, 36, 33, 0.06);
+}
 
 .utility-btn {
   width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent;
@@ -418,56 +398,6 @@ onUnmounted(() => {
 .spatial-fade-enter-from { opacity: 0; transform: translateY(16px) scale(0.99); }
 .spatial-fade-leave-to { opacity: 0; transform: translateY(-16px) scale(0.99); }
 
-/* ========== 4. 全局命令面板 (Command Palette) ========== */
-.cmd-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  background: rgba(28, 36, 33, 0.4); backdrop-filter: blur(8px);
-  display: flex; justify-content: center; align-items: flex-start; padding-top: 15vh;
-}
-
-.glass-cmd {
-  background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 20px;
-  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6);
-}
-
-.cmd-palette { width: 100%; max-width: 640px; display: flex; flex-direction: column; overflow: hidden; }
-
-.cmd-header {
-  display: flex; align-items: center; padding: 20px 24px;
-  border-bottom: 1px solid rgba(28, 36, 33, 0.06); gap: 16px;
-}
-.cmd-search-icon { font-size: 24px; color: #1C2421; }
-.cmd-input { flex: 1; font-size: 20px; font-weight: 500; color: #1C2421; border: none; background: transparent; outline: none; }
-.cmd-input::placeholder { color: #A0AAB2; font-weight: 400; }
-.cmd-hint { font-size: 12px; color: #74807B; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.cmd-hint kbd { background: rgba(28, 36, 33, 0.05); padding: 2px 6px; border-radius: 6px; font-family: monospace; }
-
-.cmd-body { padding: 16px; display: flex; flex-direction: column; gap: 16px; max-height: 400px; overflow-y: auto; }
-.cmd-body::-webkit-scrollbar { display: none; }
-
-.cmd-group-title { font-size: 12px; font-weight: 700; color: #A0AAB2; padding: 8px 12px; letter-spacing: 0.5px; }
-
-.cmd-option {
-  display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-radius: 12px;
-  cursor: pointer; transition: background 0.2s; color: #1C2421;
-}
-.cmd-option:hover { background: rgba(28, 36, 33, 0.04); }
-
-.cmd-icon-box {
-  width: 32px; height: 32px; border-radius: 8px; background: white; border: 1px solid rgba(28, 36, 33, 0.06);
-  display: flex; justify-content: center; align-items: center; font-size: 16px; color: #2A483A; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-}
-.cmd-option-text { flex: 1; font-size: 15px; font-weight: 600; }
-.cmd-enter-icon { color: #A0AAB2; opacity: 0; transition: opacity 0.2s; }
-.cmd-option:hover .cmd-enter-icon { opacity: 1; }
-
-.empty-search { color: #A0AAB2; justify-content: center; padding: 24px; font-size: 14px; font-style: italic; cursor: default; }
-.empty-search:hover { background: transparent; }
-
-/* 调度台动画 */
-.cmd-fade-enter-active, .cmd-fade-leave-active { transition: opacity 0.3s, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.cmd-fade-enter-from, .cmd-fade-leave-to { opacity: 0; transform: scale(0.95) translateY(-20px); }
 </style>
 
 <style>

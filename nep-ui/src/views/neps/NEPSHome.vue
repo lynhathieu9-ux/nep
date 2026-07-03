@@ -264,7 +264,7 @@ onMounted(async () => {
 
   if (uid) {
     try {
-      const res = await getMyFeedback(Number(uid))
+      const res = await getMyFeedback()
       const data = res.data || []
       recentFeedbacks.value = data.slice(0, 6)
       stats.value.myFeedbacks = data.length

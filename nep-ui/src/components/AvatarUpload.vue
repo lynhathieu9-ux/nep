@@ -90,4 +90,21 @@ function handleError() {
   background: #fafafa;
 }
 .upload-placeholder:hover { border-color: #409EFF; color: #409EFF; }
+
+/* 修复头像"扁圆"：强制圆形容器 + 图片等比裁剪填充 */
+.avatar-uploader :deep(.el-upload) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-uploader :deep(.el-avatar) {
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.avatar-uploader :deep(.el-avatar img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 </style>

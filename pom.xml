@@ -20,7 +20,8 @@
         <module>nep-service-feedback</module>
         <module>nep-service-content</module>
         <module>nep-gateway</module>
-        <module>nep-system</module>
+        <!-- nep-system 为早期单体，已被微服务取代，从构建中剔除并归档（保留源码备查，不参与编译/部署） -->
+        <!-- <module>nep-system</module> -->
         <module>nep-generator</module>
     </modules>
 

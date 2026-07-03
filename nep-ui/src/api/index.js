@@ -49,7 +49,13 @@ request.interceptors.response.use(
       router.push('/login')
       ElMessage.warning('登录已过期，请重新登录')
     } else {
-      ElMessage.error(error.message || '网络异常')
+      // 优先展示后端返回的友好提示（如角色越权 403 的具体说明）
+      const backendMsg = error.response?.data?.message
+      if (error.response?.status === 403) {
+        ElMessage.error(backendMsg || '无权限访问该功能')
+      } else {
+        ElMessage.error(backendMsg || error.message || '网络异常')
+      }
     }
     return Promise.reject(error)
   }

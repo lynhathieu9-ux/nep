@@ -11,7 +11,7 @@ spring:
         import-check:
           enabled: false
       discovery:
-        enabled: false
+        enabled: true          # 网关启用服务发现，路由改用 lb:// 走负载均衡
         server-addr: localhost:8848
         namespace: public
         group: DEFAULT_GROUP
@@ -19,7 +19,7 @@ spring:
       routes:
         # ==================== 用户微服务 (:8082) ====================
         - id: user-service
-          uri: http://localhost:8082
+          uri: lb://nep-service-user
           predicates:
             - Path=/api/user/**,/api/region/**
           filters:
@@ -27,23 +27,23 @@ spring:
 
         # ==================== 反馈微服务 (:8083) ====================
         - id: feedback-service
-          uri: http://localhost:8083
+          uri: lb://nep-service-feedback
           predicates:
-            - Path=/api/feedback/**,/api/aqi/**,/api/note/**
+            - Path=/api/feedback/**,/api/feedback-note/**,/api/aqi/**,/api/note/**,/api/assignment/**
           filters:
             - StripPrefix=0
 
         # ==================== 内容微服务 (:8084) ====================
         - id: content-service
-          uri: http://localhost:8084
+          uri: lb://nep-service-content
           predicates:
-            - Path=/api/news/**,/api/knowledge/**,/api/notification/**,/api/banner/**,/api/dict/**,/api/social/**,/api/ai/**,/api/chat/**,/api/statistics/**,/api/file/**,/api/log/**,/api/export/**
+            - Path=/api/news/**,/api/knowledge/**,/api/notification/**,/api/banner/**,/api/dict/**,/api/social/**,/api/ai/**,/api/chat/**,/api/statistics/**,/api/decision/**,/api/file/**,/api/log/**,/api/export/**
           filters:
             - StripPrefix=0
 
         # ==================== Knife4j 文档聚合 ====================
         - id: user-service-doc
-          uri: http://localhost:8082
+          uri: lb://nep-service-user
           predicates:
             - Path=/doc.html,/webjars/**,/v3/api-docs/**
           filters:
@@ -51,7 +51,7 @@ spring:
 
         # ==================== 静态资源（图片等） ====================
         - id: content-service-static
-          uri: http://localhost:8084
+          uri: lb://nep-service-content
           predicates:
             - Path=/images/**
           filters:

@@ -91,6 +91,9 @@
             </div>
 
             <div class="col-action">
+              <button class="action-btn" title="重置密码" @click="handleResetPwd(user)" style="margin-right:8px">
+                <el-icon><Key /></el-icon>
+              </button>
               <button class="action-btn danger" title="注销账户" @click="handleDelete(user)">
                 <el-icon><Delete /></el-icon>
               </button>
@@ -106,9 +109,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getUserList, updateUser } from '@/api/user'
+import { getUserList, updateUser, resetUserPassword } from '@/api/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, User, Iphone, Delete } from '@element-plus/icons-vue'
+import { Search, Plus, User, Iphone, Delete, Key } from '@element-plus/icons-vue'
 
 const users = ref([])
 const loading = ref(false)
@@ -156,20 +159,41 @@ async function toggleStatus(row) {
   }
 }
 
+// 问题③：管理员重置用户密码
+async function handleResetPwd(row) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `为用户 "${row.realName}" 设置新密码（至少6位，默认 123456）`,
+      '重置密码',
+      {
+        confirmButtonText: '确认重置',
+        cancelButtonText: '取消',
+        inputValue: '123456',
+        inputPattern: /^.{6,}$/,
+        inputErrorMessage: '密码至少6位'
+      }
+    )
+    await resetUserPassword(row.id, value)
+    ElMessage.success(`${row.realName} 的密码已重置`)
+  } catch (e) {
+    // 用户取消或接口报错（拦截器已提示）
+  }
+}
+
 // 删除用户
 async function handleDelete(row) {
   try {
     await ElMessageBox.confirm(
-      `确定要永久注销用户 "${row.realName}" (手机号: ${row.phone}) 吗？此操作不可逆。`, 
-      '高危操作确认', 
-      { 
-        confirmButtonText: '确认注销', 
-        cancelButtonText: '取消', 
+      `确定要永久注销用户 "${row.realName}" (手机号: ${row.phone}) 吗？此操作不可逆。`,
+      '高危操作确认',
+      {
+        confirmButtonText: '确认注销',
+        cancelButtonText: '取消',
         type: 'error',
         customClass: 'alpine-danger-box'
       }
     )
-    
+
     // 这里可接入真实的 deleteUser(row.id)
     // await deleteUser(row.id)
     

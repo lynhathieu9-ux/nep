@@ -52,6 +52,10 @@
         <h3>🏙️ 各省份反馈统计</h3>
         <div ref="barChart" style="height:300px"></div>
       </div>
+      <div class="chart-card span-2">
+        <h3>🧪 各省份污染物超标累计（SO₂ / CO / PM2.5）</h3>
+        <div ref="pollutantChart" style="height:340px"></div>
+      </div>
     </div>
   </div>
 </template>
@@ -61,7 +65,7 @@ import { ref, onMounted, onUnmounted, markRaw, watch } from 'vue'
 import * as echarts from 'echarts'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
-import { getOverview, getFeedbackStatus, getAqiDistribution, getProvinceFeedback, getMonthlyTrend, exportSpatialReport } from '@/api/statistics'
+import { getOverview, getFeedbackStatus, getAqiDistribution, getProvinceFeedback, getMonthlyTrend, getProvincePollutantExceed, exportSpatialReport } from '@/api/statistics'
 import MapView from '@/components/MapView.vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -69,7 +73,7 @@ import { ElMessage } from 'element-plus'
 const loading = ref(false)
 const exporting = ref(false)
 const overview = ref({})
-const pieChart = ref(null), lineChart = ref(null), barChart = ref(null)
+const pieChart = ref(null), lineChart = ref(null), barChart = ref(null), pollutantChart = ref(null)
 let charts = [], stompClient = null
 
 // 实时数据
@@ -127,13 +131,14 @@ async function handleExport() {
 onMounted(async () => {
   loading.value = true
   try {
-    const [ov, fs, pf, mt] = await Promise.all([
-      getOverview(), getFeedbackStatus(), getProvinceFeedback(), getMonthlyTrend()
+    const [ov, fs, pf, mt, pe] = await Promise.all([
+      getOverview(), getFeedbackStatus(), getProvinceFeedback(), getMonthlyTrend(), getProvincePollutantExceed()
     ])
     overview.value = ov.data || {}
     initPie(fs.data)
     initBar(pf.data)
     initLine(mt.data)
+    initPollutant(pe.data)
   } catch(e) {} finally { loading.value = false }
 
   // 启动 WebSocket 实时数据
@@ -179,6 +184,26 @@ function initLine(data) {
     xAxis: { type: 'category', data: (data||[]).map(d => d.month), axisLabel: { color: '#8899aa' } },
     yAxis: { type: 'value', axisLabel: { color: '#8899aa' } },
     series: [{ type: 'line', data: (data||[]).map(d => d.count), smooth:true, itemStyle:{color:'#2AA876'}, areaStyle:{color:'rgba(42,168,118,0.1)'} }]
+  })
+  charts.push(c)
+}
+
+/** 省分组三污染物超标累计（堆叠柱状图，取超标最严重前10省） */
+function initPollutant(data) {
+  if (!pollutantChart.value) return
+  const c = markRaw(echarts.init(pollutantChart.value))
+  const list = (data || []).filter(d => d.provinceName).slice(0, 10)
+  c.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: ['SO₂超标', 'CO超标', 'PM2.5超标'], textStyle: { color: '#8899aa' } },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: list.map(d => d.provinceName), axisLabel: { color: '#8899aa', rotate: 30 } },
+    yAxis: { type: 'value', name: '超标次数', axisLabel: { color: '#8899aa' } },
+    series: [
+      { name: 'SO₂超标', type: 'bar', stack: 'total', data: list.map(d => Number(d.so2Exceed) || 0), itemStyle: { color: '#E6A23C' } },
+      { name: 'CO超标', type: 'bar', stack: 'total', data: list.map(d => Number(d.coExceed) || 0), itemStyle: { color: '#F56C6C' } },
+      { name: 'PM2.5超标', type: 'bar', stack: 'total', data: list.map(d => Number(d.pm25Exceed) || 0), itemStyle: { color: '#909399' } }
+    ]
   })
   charts.push(c)
 }

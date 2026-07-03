@@ -50,8 +50,20 @@
         <el-form-item label="内容">
           <el-input v-model="form.content" type="textarea" :rows="8" placeholder="请输入内容（支持HTML）" />
         </el-form-item>
-        <el-form-item label="封面图URL">
-          <el-input v-model="form.coverImage" placeholder="可选，输入图片URL" />
+        <el-form-item label="封面图">
+          <div style="display:flex; flex-direction:column; gap:8px; width:100%">
+            <el-input v-model="form.coverImage" placeholder="图片URL（可直接填，或点下方上传）" />
+            <!-- 问题④：图片上传，上传成功后自动回填 coverImage -->
+            <el-upload
+              :show-file-list="false"
+              :before-upload="handleCoverUpload"
+              accept="image/*"
+            >
+              <el-button size="small" :loading="uploading">📷 上传图片</el-button>
+            </el-upload>
+            <img v-if="form.coverImage" :src="form.coverImage" alt="封面预览"
+                 style="max-width:200px; max-height:120px; border-radius:6px; object-fit:cover" />
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -65,10 +77,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getNewsPage, createNews, updateNews, deleteNews } from '@/api/news'
+import { uploadImage } from '@/api/file'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const newsList = ref([])
 const loading = ref(false)
+const uploading = ref(false)
 const page = ref(1)
 const size = ref(10)
 const total = ref(0)
@@ -120,6 +134,25 @@ async function handleDelete(id) {
     ElMessage.success('已删除')
     fetchData()
   } catch (e) {}
+}
+
+// 问题④：封面图上传，成功后回填 coverImage
+async function handleCoverUpload(file) {
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.warning('图片大小不能超过5MB')
+    return false
+  }
+  uploading.value = true
+  try {
+    const res = await uploadImage(file)
+    form.value.coverImage = res.data
+    ElMessage.success('图片上传成功')
+  } catch (e) {
+    ElMessage.error('图片上传失败')
+  } finally {
+    uploading.value = false
+  }
+  return false // 阻止 el-upload 默认上传行为
 }
 
 onMounted(fetchData)

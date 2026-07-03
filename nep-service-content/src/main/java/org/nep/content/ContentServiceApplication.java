@@ -16,8 +16,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableFeignClients
-@EnableScheduling
 @MapperScan("org.nep.system.mapper")
 @ComponentScan(basePackages = {"org.nep.content", "org.nep.system", "org.nep.framework", "org.nep.common"})
 public class ContentServiceApplication {

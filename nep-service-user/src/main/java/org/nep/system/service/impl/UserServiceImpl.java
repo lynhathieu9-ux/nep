@@ -73,4 +73,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPassword(newEnc);
         this.updateById(user);
     }
+
+    /**
+     * 问题③：管理员重置指定用户密码（无需校验原密码）。
+     * 新密码同样 MD5 加密后落库，与注册/改密加密方式保持一致。
+     */
+    @Override
+    public void resetPassword(Long userId, String newPassword) {
+        User user = this.getById(userId);
+        if (user == null) throw new BusinessException("用户不存在");
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BusinessException("新密码至少6位");
+        }
+        String newEnc = DigestUtils.md5DigestAsHex(newPassword.getBytes(StandardCharsets.UTF_8));
+        user.setPassword(newEnc);
+        this.updateById(user);
+    }
 }

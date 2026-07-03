@@ -40,3 +40,6 @@ Desktop.ini
 # Application
 uploads/
 logs/
+
+# 本地 Nacos 服务包（勿提交，体积大）
+nacos/

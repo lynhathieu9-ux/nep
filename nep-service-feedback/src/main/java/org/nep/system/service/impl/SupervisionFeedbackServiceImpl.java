@@ -75,6 +75,89 @@ public class SupervisionFeedbackServiceImpl
 
     @Override
     @Transactional
+    public void transfer(Long feedbackId, Long toInspectorId) {
+        SupervisionFeedback f = this.getById(feedbackId);
+        if (f == null) throw new BusinessException("反馈记录不存在");
+        if (!SupervisionFeedback.STATUS_ASSIGNED.equals(f.getStatus())) {
+            throw new BusinessException("仅已指派状态的工单可转派（当前：" + f.getStatus() + "）");
+        }
+        if (toInspectorId.equals(f.getAssignedInspectorId())) {
+            throw new BusinessException("新任网格员不能与原网格员相同");
+        }
+        f.setAssignedInspectorId(toInspectorId);
+        f.setAssignTime(LocalDateTime.now());
+        // 转派刷新截止时间，给新网格员完整处理窗口
+        f.setDueDate(LocalDateTime.now().plusHours(SupervisionFeedback.ESCALATION_THRESHOLD_HOURS));
+        this.updateById(f);
+        log.info("工单转派成功: id={}, newInspectorId={}", feedbackId, toInspectorId);
+    }
+
+    @Override
+    @Transactional
+    public int batchAssign(List<Long> feedbackIds, Long inspectorId) {
+        if (feedbackIds == null || feedbackIds.isEmpty()) {
+            throw new BusinessException("请选择要指派的工单");
+        }
+        int success = 0;
+        for (Long id : feedbackIds) {
+            try {
+                assign(id, inspectorId);
+                success++;
+            } catch (Exception e) {
+                // 单条失败不影响其余，记录后继续
+                log.warn("批量指派跳过工单 {}: {}", id, e.getMessage());
+            }
+        }
+        log.info("批量指派完成: 成功 {}/{}, inspectorId={}", success, feedbackIds.size(), inspectorId);
+        return success;
+    }
+
+    @Override
+    @Transactional
+    public void reject(Long feedbackId, Long inspectorId, String reason) {
+        SupervisionFeedback f = this.getById(feedbackId);
+        if (f == null) throw new BusinessException("反馈记录不存在");
+        if (!SupervisionFeedback.STATUS_ASSIGNED.equals(f.getStatus())) {
+            throw new BusinessException("仅已指派状态的工单可拒绝");
+        }
+        // 归属校验：只能拒绝指派给自己的任务
+        if (f.getAssignedInspectorId() == null || !f.getAssignedInspectorId().equals(inspectorId)) {
+            throw new BusinessException(403, "该任务未指派给你，无法拒绝");
+        }
+        // 退回待指派，清空指派信息，待管理员重新指派
+        f.setStatus(SupervisionFeedback.STATUS_PENDING);
+        f.setAssignedInspectorId(null);
+        f.setAssignTime(null);
+        this.updateById(f);
+        log.info("工单被拒绝退回: id={}, byInspector={}, reason={}", feedbackId, inspectorId, reason);
+    }
+
+    /**
+     * 问题⑦：网格员接受任务。仅本人被指派的 ASSIGNED 工单可接受，
+     * 状态置为 PROCESSING 并落库，修复"接受操作后数据库状态未同步"的 bug。
+     */
+    @Override
+    @Transactional
+    public void accept(Long feedbackId, Long inspectorId) {
+        SupervisionFeedback f = this.getById(feedbackId);
+        if (f == null) throw new BusinessException("反馈记录不存在");
+        // 归属校验：只能接受指派给自己的任务
+        if (f.getAssignedInspectorId() == null || !f.getAssignedInspectorId().equals(inspectorId)) {
+            throw new BusinessException(403, "该任务未指派给你，无法接受");
+        }
+        if (SupervisionFeedback.STATUS_PROCESSING.equals(f.getStatus())) {
+            throw new BusinessException("该任务已接受，无需重复操作");
+        }
+        if (!SupervisionFeedback.STATUS_ASSIGNED.equals(f.getStatus())) {
+            throw new BusinessException(400, "仅待检测(已指派)的任务可接受");
+        }
+        f.setStatus(SupervisionFeedback.STATUS_PROCESSING);
+        this.updateById(f);
+        log.info("网格员接受任务: id={}, inspectorId={}, 状态→PROCESSING", feedbackId, inspectorId);
+    }
+
+    @Override
+    @Transactional
     public void cancel(Long feedbackId, Long supervisorId) {
         SupervisionFeedback f = this.getById(feedbackId);
         if (f == null) throw new BusinessException("反馈记录不存在");

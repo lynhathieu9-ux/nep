@@ -19,6 +19,18 @@ public interface SupervisionFeedbackService extends IService<SupervisionFeedback
     /** 指派网格员 */
     void assign(Long feedbackId, Long inspectorId);
 
+    /** 转派：将已指派工单改派给另一网格员（管理员） */
+    void transfer(Long feedbackId, Long toInspectorId);
+
+    /** 批量指派：把多个待指派工单一次性指派给同一网格员，返回成功数量 */
+    int batchAssign(java.util.List<Long> feedbackIds, Long inspectorId);
+
+    /** 网格员拒绝任务：退回为待指派并记录原因（管理员可重新指派） */
+    void reject(Long feedbackId, Long inspectorId, String reason);
+
+    /** 网格员接受任务：ASSIGNED→PROCESSING 落库（问题⑦），带归属校验 */
+    void accept(Long feedbackId, Long inspectorId);
+
     /** 撤回反馈（仅PENDING状态） */
     void cancel(Long feedbackId, Long supervisorId);
 

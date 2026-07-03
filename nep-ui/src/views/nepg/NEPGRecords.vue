@@ -191,7 +191,7 @@ const fetchRecords = async () => {
   
   isLoading.value = true
   try {
-    const res = await getMyAqiRecords(Number(uid))
+    const res = await getMyAqiRecords()
     if (res && res.data) {
       records.value = res.data
     }

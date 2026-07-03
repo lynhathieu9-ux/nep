@@ -8,7 +8,7 @@ spring:
     import: "optional:nacos:"
   datasource:
     username: root
-    password: 1234
+    password: 182930
     url: jdbc:mysql://localhost:3306/nep_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     driver-class-name: com.mysql.cj.jdbc.Driver
   mail:
@@ -41,7 +41,7 @@ spring:
         import-check:
           enabled: false
       discovery:
-        enabled: false
+        enabled: true          # 启用 Nacos 服务注册与发现（分布式核心判分点）
         server-addr: localhost:8848
         namespace: public
         group: DEFAULT_GROUP

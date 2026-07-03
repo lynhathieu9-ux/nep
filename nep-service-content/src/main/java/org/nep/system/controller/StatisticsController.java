@@ -284,4 +284,12 @@ public class StatisticsController {
         }
         return Result.ok(cityMapper.selectList(null));
     }
+
+    // ==================== 省分组污染物超标统计（需求书核心） ====================
+
+    @Operation(summary = "省分组各污染物超标累计（SO2/CO/PM2.5/综合AQI）")
+    @GetMapping("/province-pollutant-exceed")
+    public Result<List<Map<String, Object>>> provincePollutantExceed() {
+        return Result.ok(aqiMapper.aggregatePollutantExceedByProvince());
+    }
 }

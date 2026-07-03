@@ -112,7 +112,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getUnreadCount } from '@/api/notification'
-import { getFeedbackPage } from '@/api/feedback'
+import { getAssignedStats } from '@/api/feedback'
 import { ElMessageBox } from 'element-plus'
 import {
   Monitor, UserFilled, LocationInformation, Setting,
@@ -138,10 +138,11 @@ async function fetchData() {
   try {
     const [notifRes, taskRes] = await Promise.all([
       getUnreadCount(Number(uid)),
-      getFeedbackPage(1, 1, 'ASSIGNED', Number(uid))
+      getAssignedStats()
     ])
     unreadCount.value = notifRes.data?.unreadCount || 0
-    taskCount.value = taskRes.total || 0
+    // 待检测任务数（网格员专属统计，仅本人）
+    taskCount.value = taskRes.data?.assigned || 0
   } catch (e) {}
 }
 

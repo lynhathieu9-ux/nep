@@ -14,7 +14,7 @@
         <aside class="profile-sidebar">
           <div class="avatar-showcase">
             <div class="avatar-ring">
-              <avatar-upload v-model="avatar" @uploaded="saveAvatar" class="premium-avatar-uploader" />
+              <avatar-upload v-model="avatar" :size="120" @uploaded="saveAvatar" class="premium-avatar-uploader" />
             </div>
             <div class="avatar-hint">
               <el-icon><Camera /></el-icon>
@@ -297,8 +297,20 @@ onMounted(loadProfile)
   background: linear-gradient(135deg, rgba(42, 72, 58, 0.1), rgba(42, 72, 58, 0.02));
   border: 1px solid rgba(42, 72, 58, 0.05); box-shadow: 0 12px 24px -8px rgba(28, 36, 33, 0.08);
 }
-.premium-avatar-uploader :deep(.el-upload), .premium-avatar-uploader :deep(.avatar) {
+.premium-avatar-uploader :deep(.el-upload) {
   width: 122px; height: 122px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+/* 强制头像为正方形圆形并等比裁剪，修复"扁圆"变形 */
+.premium-avatar-uploader :deep(.el-avatar) {
+  width: 122px !important; height: 122px !important;
+  border-radius: 50%; overflow: hidden;
+}
+.premium-avatar-uploader :deep(.el-avatar img) {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.premium-avatar-uploader :deep(.upload-placeholder) {
+  width: 122px !important; height: 122px !important;
 }
 
 .avatar-hint { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #A0AAB2; font-weight: 500; }

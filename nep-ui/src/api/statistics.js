@@ -30,6 +30,21 @@ export function getMonthlyTrend() {
   return request.get('/statistics/monthly-trend')
 }
 
+/** 省分组各污染物超标累计（SO2/CO/PM2.5/综合AQI） */
+export function getProvincePollutantExceed() {
+  return request.get('/statistics/province-pollutant-exceed')
+}
+
+/** 全国网格覆盖率 */
+export function getCoverage() {
+  return request.get('/statistics/coverage')
+}
+
+/** AQI检测数量实时统计 */
+export function getCount() {
+  return request.get('/statistics/count')
+}
+
 /** 地图热力图 — 按城市聚合AQI数据 */
 export function getMapAqi() {
   return request.get('/statistics/map-aqi')

@@ -76,4 +76,27 @@ public interface AqiDetectionMapper extends BaseMapper<AqiDetection> {
      */
     @Select("SELECT COUNT(DISTINCT inspector_id) FROM nep_aqi_detection WHERE deleted = 0 AND detection_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")
     long countActiveInspectors24h();
+
+    /**
+     * 按省份分组统计各污染物超标累计数量（需求书 NEPM/NEPV 统计要求）。
+     * <p>单项 AQI 分指数 > 100 视为该污染物超标。返回：
+     * provinceId, provinceName, so2Exceed(SO2超标数), coExceed(CO超标数),
+     * pm25Exceed(PM2.5超标数), aqiExceed(综合AQI等级超标数), total(检测总数)。</p>
+     */
+    @Select("""
+        SELECT
+            ad.province_id AS provinceId,
+            p.name AS provinceName,
+            SUM(CASE WHEN ad.so2_aqi > 100 THEN 1 ELSE 0 END) AS so2Exceed,
+            SUM(CASE WHEN ad.co_aqi > 100 THEN 1 ELSE 0 END) AS coExceed,
+            SUM(CASE WHEN ad.pm25_aqi > 100 THEN 1 ELSE 0 END) AS pm25Exceed,
+            SUM(CASE WHEN ad.final_aqi > 100 THEN 1 ELSE 0 END) AS aqiExceed,
+            COUNT(*) AS total
+        FROM nep_aqi_detection ad
+        LEFT JOIN nep_province p ON ad.province_id = p.id
+        WHERE ad.deleted = 0
+        GROUP BY ad.province_id, p.name
+        ORDER BY aqiExceed DESC, total DESC
+        """)
+    List<Map<String, Object>> aggregatePollutantExceedByProvince();
 }

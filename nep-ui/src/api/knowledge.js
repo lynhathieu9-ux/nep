@@ -34,3 +34,13 @@ export function updateKnowledge(id, data) {
 export function deleteKnowledge(id) {
   return request.delete(`/knowledge/${id}`)
 }
+
+/** 问题⑤：下载知识库附件（返回 blob，带鉴权） */
+export function downloadKnowledgeFile(path, name) {
+  return request.get('/file/download', { params: { path, name }, responseType: 'blob' })
+}
+
+/** 导出知识库内容为PDF文档（无附件时自动降级） */
+export function exportKnowledgePdf(id) {
+  return request.get(`/knowledge/${id}/export`, { responseType: 'blob' })
+}

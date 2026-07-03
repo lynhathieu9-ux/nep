@@ -99,10 +99,23 @@ public class SupervisionFeedback extends BaseEntity {
      */
     private Integer archived;
 
+    // ==================== 监督员满意度评价字段 ====================
+
+    /** 满意度评分（1-5），监督员对已完成反馈的处理质量评价 */
+    private Integer rating;
+
+    /** 评价备注 */
+    private String ratingComment;
+
+    /** 评价时间 */
+    private LocalDateTime ratingTime;
+
     // ==================== 常量定义 ====================
 
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_ASSIGNED = "ASSIGNED";
+    /** 网格员已接受任务、检测进行中（问题⑦：接受任务后落库的中间状态） */
+    public static final String STATUS_PROCESSING = "PROCESSING";
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_ESCALATED = "ESCALATED";
     public static final String STATUS_ARCHIVED = "ARCHIVED";

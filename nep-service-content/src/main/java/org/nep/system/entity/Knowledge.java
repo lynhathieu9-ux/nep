@@ -34,4 +34,6 @@ public class Knowledge extends BaseEntity {
     private Integer status;
     /** 发布人ID */
     private Long publisherId;
+    /** 附件文件URL（问题⑤：知识库文件下载） */
+    private String attachmentUrl;
 }

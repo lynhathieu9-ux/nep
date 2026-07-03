@@ -9,21 +9,20 @@ import org.springframework.stereotype.Service;
 @Service
 public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge> implements KnowledgeService {
 
+    /**
+     * 原子自增浏览次数。
+     * 使用 UPDATE view_count = view_count + 1 防并发丢失，不走 read-then-write。
+     */
     @Override
     public void incrementViewCount(Long id) {
-        Knowledge k = this.getById(id);
-        if (k != null) {
-            k.setViewCount((k.getViewCount() == null ? 0 : k.getViewCount()) + 1);
-            this.updateById(k);
-        }
+        baseMapper.incrementViewCount(id);
     }
 
+    /**
+     * 原子自增点赞数。
+     */
     @Override
     public void incrementLikeCount(Long id) {
-        Knowledge k = this.getById(id);
-        if (k != null) {
-            k.setLikeCount((k.getLikeCount() == null ? 0 : k.getLikeCount()) + 1);
-            this.updateById(k);
-        }
+        baseMapper.incrementLikeCount(id);
     }
 }

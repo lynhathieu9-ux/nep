@@ -6,21 +6,21 @@
         <h1 class="page-title">{{ dynamicText.pageTitle }}</h1>
         <span class="task-counter">{{ filteredTasks.length }} {{ dynamicText.taskUnit }}</span>
       </div>
-      
+
       <div class="header-right">
         <div class="alpine-search">
           <el-icon class="search-icon"><Search /></el-icon>
-          <input 
-            type="text" 
-            v-model="searchQuery" 
+          <input
+            type="text"
+            v-model="searchQuery"
             :placeholder="dynamicText.searchPlaceholder"
             class="search-input"
           >
         </div>
-        
+
         <div class="alpine-segments">
-          <button 
-            v-for="tab in filterTabs" 
+          <button
+            v-for="tab in filterTabs"
             :key="tab.value"
             class="segment-btn"
             :class="{ active: currentTab === tab.value }"
@@ -40,10 +40,10 @@
           <el-icon class="empty-icon"><List /></el-icon>
           <p>{{ dynamicText.emptyListDesc }}</p>
         </div>
-        
-        <div 
+
+        <div
           v-else
-          v-for="task in filteredTasks" 
+          v-for="task in filteredTasks"
           :key="task.id"
           class="task-card"
           :class="{ 'is-selected': selectedTaskId === task.id }"
@@ -95,7 +95,7 @@
               <h4 class="section-title"><el-icon><Document /></el-icon> {{ dynamicText.descTitle }}</h4>
               <p class="section-text">{{ selectedTask.description }}</p>
             </div>
-            
+
             <div class="detail-section">
               <h4 class="section-title"><el-icon><Timer /></el-icon> {{ dynamicText.timeTitle }}</h4>
               <div class="time-grid">
@@ -115,36 +115,83 @@
             <button class="alpine-btn ghost" @click="handleCancel">
               {{ dynamicText.actionCancel }}
             </button>
-            <button 
-              class="alpine-btn primary" 
+            <button
+              class="alpine-btn primary"
               :disabled="selectedTask.statusCode === 'completed'"
               @click="handlePrimaryAction"
             >
-              <el-icon><Position /></el-icon> 
-              {{ selectedTask.statusCode === 'pending' ? dynamicText.actionStart : (selectedTask.statusCode === 'active' ? dynamicText.actionSubmit : dynamicText.actionDone) }}
+              <el-icon><Position /></el-icon>
+              {{ selectedTask.statusCode === 'completed' ? dynamicText.actionDone : (selectedTask.statusCode === 'pending' ? dynamicText.actionStart : dynamicText.actionSubmit) }}
             </button>
           </div>
         </div>
       </section>
     </main>
+
+    <!-- AQI 录入抽屉 -->
+    <el-drawer
+      v-model="showAqiDrawer"
+      title="提交现场检测数据"
+      direction="rtl"
+      size="480px"
+    >
+      <div class="aqi-drawer-content">
+        <div class="aqi-form-section">
+          <h4 class="form-section-title"><el-icon><DataLine /></el-icon> 污染物分指数（AQI）</h4>
+          <p class="form-hint">请输入三项污染物实测 AQI 分指数（范围 0-500）</p>
+
+          <div class="aqi-input-group">
+            <label class="aqi-label">SO₂ 二氧化硫</label>
+            <el-input-number v-model="aqiForm.so2Aqi" :min="0" :max="500" :step="1" controls-position="right" />
+          </div>
+
+          <div class="aqi-input-group">
+            <label class="aqi-label">CO 一氧化碳</label>
+            <el-input-number v-model="aqiForm.coAqi" :min="0" :max="500" :step="1" controls-position="right" />
+          </div>
+
+          <div class="aqi-input-group">
+            <label class="aqi-label">PM2.5 悬浮颗粒物</label>
+            <el-input-number v-model="aqiForm.pm25Aqi" :min="0" :max="500" :step="1" controls-position="right" />
+          </div>
+
+          <div class="aqi-preview-card" :style="{ borderColor: aqiLevelColor }">
+            <div class="preview-label">综合 AQI</div>
+            <div class="preview-value" :style="{ color: aqiLevelColor }">{{ finalAqi }}</div>
+            <div class="preview-level" :style="{ color: aqiLevelColor }">{{ aqiLevelText }}</div>
+            <div class="preview-hint">= MAX(SO₂, CO, PM2.5)</div>
+          </div>
+
+          <div class="aqi-input-group">
+            <label class="aqi-label">检测备注（可选）</label>
+            <el-input v-model="aqiForm.remark" type="textarea" :rows="3" placeholder="记录现场情况..." />
+          </div>
+        </div>
+
+        <div class="drawer-actions">
+          <el-button @click="showAqiDrawer = false">取消</el-button>
+          <el-button type="primary" :loading="submittingAqi" @click="handleSubmitAqi">
+            <el-icon><Position /></el-icon> 提交检测报告
+          </el-button>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useUserStore } from '@/stores/user'
-import { getFeedbackPage } from '@/api/feedback' 
+import { useRouter } from 'vue-router'
+import { getAssignedToMe, acceptTask } from '@/api/feedback'
+import { submitAqi } from '@/api/aqi'
 import { ElMessage } from 'element-plus'
 import {
   Search, List, Location, Calendar, Briefcase,
-  LocationInformation, MapLocation, Document, Timer, Position
+  LocationInformation, MapLocation, Document, Timer, Position, DataLine
 } from '@element-plus/icons-vue'
 
-const userStore = useUserStore()
+const router = useRouter()
 
-// ==========================================
-// 1. 全局文案
-// ==========================================
 const dynamicText = ref({
   pageTitle: '检测任务',
   taskUnit: '项任务',
@@ -162,14 +209,11 @@ const dynamicText = ref({
   noDeadlineText: '按常规流程推进',
   mapPlaceholder: '环境监管网格坐标已锁定',
   actionCancel: '取消选中',
-  actionStart: '接收并开始执行',
+  actionStart: '接受任务',
   actionSubmit: '提交检测报告',
   actionDone: '任务已闭环'
 })
 
-// ==========================================
-// 2. 响应式状态
-// ==========================================
 const searchQuery = ref('')
 const currentTab = ref('all')
 const selectedTaskId = ref(null)
@@ -178,87 +222,103 @@ const isLoadingDetail = ref(false)
 
 const filterTabs = ref([
   { label: '全部', value: 'all' },
-  { label: '待处理', value: 'pending' },
-  { label: '进行中', value: 'active' },
+  { label: '待接受', value: 'pending' },
+  { label: '检测中', value: 'active' },
   { label: '已完成', value: 'completed' }
 ])
 
 const rawTasks = ref([])
 
-// ==========================================
-// 3. 状态与优先级映射
-// ==========================================
+// AQI 录入抽屉
+const showAqiDrawer = ref(false)
+const submittingAqi = ref(false)
+const aqiForm = ref({
+  feedbackId: null,
+  so2Aqi: 0,
+  coAqi: 0,
+  pm25Aqi: 0,
+  remark: ''
+})
+
+// 实时计算最终 AQI = MAX(SO2, CO, PM2.5)
+const finalAqi = computed(() => {
+  return Math.max(aqiForm.value.so2Aqi, aqiForm.value.coAqi, aqiForm.value.pm25Aqi)
+})
+
+const aqiLevelColor = computed(() => {
+  const val = finalAqi.value
+  if (val <= 50) return '#2AA876'
+  if (val <= 100) return '#85C77A'
+  if (val <= 150) return '#F5A623'
+  if (val <= 200) return '#E87A31'
+  if (val <= 300) return '#D9534F'
+  return '#A03232'
+})
+
+const aqiLevelText = computed(() => {
+  const val = finalAqi.value
+  if (val <= 50) return '优'
+  if (val <= 100) return '良'
+  if (val <= 150) return '轻度污染'
+  if (val <= 200) return '中度污染'
+  if (val <= 300) return '重度污染'
+  return '严重污染'
+})
+
 const statusMap = {
-  'ASSIGNED': { code: 'pending', text: '待处理' },
-  'PROCESSING': { code: 'active', text: '进行中' },
-  'COMPLETED': { code: 'completed', text: '已完成' },
-  'CLOSED': { code: 'completed', text: '已闭环' }
+  'ASSIGNED': { code: 'pending', text: '待接受' },
+  'PROCESSING': { code: 'active', text: '检测中' },
+  'COMPLETED': { code: 'completed', text: '已完成' }
 }
 
 const levelMap = {
   1: { code: 'info', text: '常规' },
-  2: { code: 'warning', text: '中优' },
-  3: { code: 'danger', text: '紧急' }
+  2: { code: 'info', text: '常规' },
+  3: { code: 'warning', text: '中优' },
+  4: { code: 'warning', text: '中优' },
+  5: { code: 'danger', text: '紧急' },
+  6: { code: 'danger', text: '紧急' }
 }
 
-// ==========================================
-// 4. 核心数据请求（关键修正点）
-// ==========================================
 const fetchAssignedTasks = async () => {
-  // 兼容用户身份获取
-  const userId = userStore.user?.id || Number(localStorage.getItem('userId'))
-  if (!userId) {
-    console.warn('未获取到用户ID，无法加载任务')
-    return
-  }
-  
   isLoading.value = true
   try {
-    // 明确获取指派状态的任务，兼容旧接口逻辑
-    const res = await getFeedbackPage(1, 100, 'ASSIGNED', userId)
-    
-    // 兼容多种后端返回格式：data 直接是数组 || data.records 分页对象
-    let taskList = []
-    if (Array.isArray(res.data)) {
-      taskList = res.data
-    } else if (res.data?.records) {
-      taskList = res.data.records
-    } else if (Array.isArray(res)) {
-      // 某些拦截器可能直接返回数组
-      taskList = res
-    }
-    
+    const res = await getAssignedToMe()
+    const taskList = res.data || []
+
     rawTasks.value = taskList.map(item => ({
       id: item.id,
       displayId: `TSK-${new Date(item.createTime || item.assignTime).getFullYear()}-${String(item.id).padStart(4, '0')}`,
-      title: item.title || item.feedbackType || '未命名指派任务',
-      // 地址字段兼容
-      address: item.specificAddress || item.address || '未指定明确地点',
-      date: item.assignTime || item.createTime || '未知时间',
-      deadline: item.deadline || null,
-      description: item.description || item.content || '管理员暂未提供详细描述',
+      title: `AQI 等级 ${item.estimatedAqiLevel || '?'} 现场检测`,
+      address: item.specificAddress || '未指定明确地点',
+      date: formatTime(item.assignTime || item.createTime),
+      deadline: item.dueDate ? formatTime(item.dueDate) : null,
+      description: item.description || '管理员暂未提供详细描述',
       statusCode: statusMap[item.status]?.code || 'pending',
-      statusText: statusMap[item.status]?.text || '待处理',
-      levelCode: levelMap[item.estimatedAqiLevel]?.code || levelMap[item.priority]?.code || 'info',
-      levelText: levelMap[item.estimatedAqiLevel]?.text || levelMap[item.priority]?.text || '常规'
+      statusText: statusMap[item.status]?.text || '待检测',
+      levelCode: levelMap[item.estimatedAqiLevel]?.code || 'info',
+      levelText: levelMap[item.estimatedAqiLevel]?.text || '常规',
+      rawData: item
     }))
   } catch (error) {
     console.error('任务加载失败:', error)
-    ElMessage.error('无法同步管理员委派任务，请检查网络连接')
+    ElMessage.error('无法同步管理员委派任务')
   } finally {
     isLoading.value = false
   }
 }
 
-// ==========================================
-// 5. 计算属性与交互
-// ==========================================
+function formatTime(t) {
+  if (!t) return '-'
+  return t.replace('T', ' ').substring(0, 16)
+}
+
 const filteredTasks = computed(() => {
   return rawTasks.value.filter(task => {
     const matchTab = currentTab.value === 'all' || task.statusCode === currentTab.value
-    const matchSearch = 
-      task.title.includes(searchQuery.value) || 
-      task.displayId.includes(searchQuery.value) || 
+    const matchSearch =
+      task.title.includes(searchQuery.value) ||
+      task.displayId.includes(searchQuery.value) ||
       task.address.includes(searchQuery.value)
     return matchTab && matchSearch
   })
@@ -276,16 +336,47 @@ const selectTask = (task) => {
 
 const handlePrimaryAction = async () => {
   if (!selectedTask.value) return
-  // 实际项目中应调用后端状态更新接口
+  if (selectedTask.value.statusCode === 'completed') {
+    ElMessage.info('该任务已完成')
+    return
+  }
+  // 问题⑦：待接受(pending)时先接受任务(落库 PROCESSING)，再进入检测录入
   if (selectedTask.value.statusCode === 'pending') {
-    selectedTask.value.statusCode = 'active'
-    selectedTask.value.statusText = '进行中'
-    ElMessage.success('已接收该任务，请尽快前往现场')
-  } else if (selectedTask.value.statusCode === 'active') {
-    selectedTask.value.statusCode = 'completed'
-    selectedTask.value.statusText = '已完成'
-    ElMessage.success('报告提交成功，任务已闭环')
-    selectedTaskId.value = null 
+    try {
+      await acceptTask(selectedTask.value.id)
+      ElMessage.success('已接受任务')
+      await fetchAssignedTasks()
+      // 重新选中该任务，保持详情打开
+      selectedTaskId.value = selectedTask.value ? selectedTaskId.value : null
+    } catch (e) { /* 错误提示已由拦截器处理 */ }
+    return
+  }
+  // 检测中(active)：打开 AQI 录入抽屉提交检测
+  aqiForm.value = {
+    feedbackId: selectedTask.value.id,
+    so2Aqi: 0,
+    coAqi: 0,
+    pm25Aqi: 0,
+    remark: ''
+  }
+  showAqiDrawer.value = true
+}
+
+const handleSubmitAqi = async () => {
+  if (aqiForm.value.so2Aqi === 0 && aqiForm.value.coAqi === 0 && aqiForm.value.pm25Aqi === 0) {
+    ElMessage.warning('请至少填写一项污染物检测值')
+    return
+  }
+  submittingAqi.value = true
+  try {
+    await submitAqi(aqiForm.value)
+    ElMessage.success('检测报告提交成功，任务已闭环')
+    showAqiDrawer.value = false
+    selectedTaskId.value = null
+    await fetchAssignedTasks()
+  } catch (e) {
+  } finally {
+    submittingAqi.value = false
   }
 }
 
@@ -293,34 +384,21 @@ const handleCancel = () => {
   selectedTaskId.value = null
 }
 
-// ==========================================
-// 6. 初始化
-// ==========================================
-onMounted(async () => {
-  // 确保用户信息已加载
-  if (!userStore.user) {
-    await userStore.fetchUser()
-  }
+onMounted(() => {
   fetchAssignedTasks()
 })
 </script>
 
 <style scoped>
-/* =======================================================
-   顶级画布约束 (Strict Canvas)
-======================================================= */
 .alpine-tasks-canvas {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  overflow: hidden; 
+  overflow: hidden;
 }
 
-/* =======================================================
-   顶部控制台 (Header Console)
-======================================================= */
 .tasks-header {
   flex-shrink: 0;
   display: flex;
@@ -358,23 +436,17 @@ onMounted(async () => {
 }
 .segment-btn.active { background: white; color: #0F172A; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06); }
 
-/* =======================================================
-   主工作区 (Master-Detail Workspace)
-======================================================= */
 .tasks-workspace {
   flex: 1;
   display: flex;
   gap: 24px;
-  min-height: 0; /* 防止 Flex 子项溢出 */
+  min-height: 0;
 }
 
-/* =======================================================
-   左侧任务流 (Master List)
-======================================================= */
 .task-list-pane {
   width: 380px; flex-shrink: 0;
   display: flex; flex-direction: column; gap: 12px;
-  overflow-y: auto; padding-right: 8px; 
+  overflow-y: auto; padding-right: 8px;
 }
 .task-list-pane::-webkit-scrollbar { width: 4px; }
 .task-list-pane::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.1); border-radius: 4px; }
@@ -397,11 +469,8 @@ onMounted(async () => {
 
 .task-title { font-size: 15px; font-weight: 600; color: #0F172A; margin: 0; line-height: 1.4; }
 .task-meta { display: flex; flex-direction: column; gap: 6px; }
-.meta-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748B; }
 
-/* =======================================================
-   右侧详情画板 (Detail Canvas)
-======================================================= */
 .task-detail-pane {
   flex: 1;
   background: white; border-radius: 20px;
@@ -459,7 +528,7 @@ onMounted(async () => {
 
 .alpine-btn {
   padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 600;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; 
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   cursor: pointer; border: none; transition: all 0.3s;
 }
 .alpine-btn.primary { background: #0284C7; color: white; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2); }
@@ -468,9 +537,6 @@ onMounted(async () => {
 .alpine-btn.ghost { background: transparent; color: #64748B; }
 .alpine-btn.ghost:hover { background: #F1F5F9; color: #0F172A; }
 
-/* =======================================================
-   空状态 (Empty States)
-======================================================= */
 .empty-state-list { padding: 40px 20px; text-align: center; color: #94A3B8; font-size: 13px; }
 .empty-state-detail { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #64748B; }
 .glass-placeholder {
@@ -481,4 +547,89 @@ onMounted(async () => {
 }
 .empty-state-detail h3 { font-size: 18px; color: #0F172A; margin: 0 0 8px 0; font-weight: 600; }
 .empty-state-detail p { font-size: 14px; margin: 0; max-width: 260px; text-align: center; line-height: 1.5; }
+
+/* AQI 抽屉样式 */
+.aqi-drawer-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.aqi-form-section {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 8px 0;
+}
+
+.form-hint {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0 0 24px 0;
+}
+
+.aqi-input-group {
+  margin-bottom: 20px;
+}
+
+.aqi-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.aqi-preview-card {
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+  border: 2px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  margin: 24px 0;
+}
+
+.preview-label {
+  font-size: 12px;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.preview-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.preview-level {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.preview-hint {
+  font-size: 12px;
+  color: #94A3B8;
+  font-family: monospace;
+}
+
+.drawer-actions {
+  padding-top: 16px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
 </style>

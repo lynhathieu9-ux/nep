@@ -108,6 +108,8 @@ import {
   DocumentChecked, DataLine, Warning, CircleCheck, 
   TopRight, ArrowRight, Location, Coffee
 } from '@element-plus/icons-vue'
+// 问题⑥：工作台概览数据动态化 —— 引入网格员任务接口
+import { getAssignedToMe, getAssignedStats } from '@/api/feedback'
 
 const userStore = useUserStore()
 
@@ -172,9 +174,35 @@ const updateGreetingTime = () => {
   else dynamicContent.value.greetingPrefix = '晚上好'
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (!userStore.user) userStore.fetchUser()
   updateGreetingTime()
+
+  // 问题⑥：从后端动态加载工作台概览（替换写死的静态值）
+  try {
+    const statsRes = await getAssignedStats()
+    const d = statsRes.data || {}
+    // 待办 = 待检测(ASSIGNED)，已完成 = COMPLETED
+    metricsData.value = { pending: d.assigned || 0, completed: d.completed || 0 }
+  } catch (e) { /* 接口异常时保持默认值，不影响页面 */ }
+
+  // 焦点任务列表改为真实"指派给我且待检测"的任务
+  try {
+    const taskRes = await getAssignedToMe('ASSIGNED')
+    const list = taskRes.data || []
+    const levelMap = {
+      1: { code: 'info', text: '常规' }, 2: { code: 'info', text: '常规' },
+      3: { code: 'warning', text: '中优' }, 4: { code: 'warning', text: '中优' },
+      5: { code: 'danger', text: '高优' }, 6: { code: 'danger', text: '高优' }
+    }
+    rawTasks.value = list.map(t => ({
+      id: t.id,
+      title: t.description || ('AQI等级' + (t.estimatedAqiLevel || '?') + '现场检测'),
+      address: t.specificAddress || '未指定地点',
+      levelCode: levelMap[t.estimatedAqiLevel]?.code || 'info',
+      levelText: levelMap[t.estimatedAqiLevel]?.text || '常规'
+    }))
+  } catch (e) { /* 接口异常时保持默认值 */ }
 })
 </script>
 

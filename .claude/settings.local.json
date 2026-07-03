@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn -f d:/OneDrive/Desktop/001/project/neusoft-environmental-supervision/pom.xml -pl nep-system -am spring-boot:run)",
+      "Bash(curl -s http://localhost:8081/doc.html)"
+    ]
+  }
+}

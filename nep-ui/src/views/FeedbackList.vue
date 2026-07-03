@@ -252,7 +252,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { getFeedbackPage, rateFeedback, getFeedbackById, cancelFeedback } from '@/api/feedback'
+import { getMyFeedbackPage, rateFeedback, getFeedbackById, cancelFeedback } from '@/api/feedback'
 import { getAqiByFeedbackId } from '@/api/aqi'
 import {
   RefreshRight, Plus, LocationInformation, Search,
@@ -308,7 +308,7 @@ const currentUserId = ref(Number(localStorage.getItem('userId') || 0))
 async function handleRate() {
   if (newRating.value === 0) { ElMessage.warning('请选择评分'); return }
   try {
-    await rateFeedback(selectedFeedback.value.id, currentUserId.value, newRating.value, newRatingComment.value)
+    await rateFeedback(selectedFeedback.value.id, newRating.value, newRatingComment.value)
     ElMessage.success('评价成功')
     // 刷新详情
     const res = await getFeedbackById(selectedFeedback.value.id)
@@ -337,7 +337,7 @@ async function handleSearch() {
   loading.value = true
   try {
     const range = searchForm.value.dateRange || []
-    const res = await getFeedbackPage(
+    const res = await getMyFeedbackPage(
       currentPage.value, pageSize.value,
       searchForm.value.status, searchForm.value.keyword,
       range.length >= 1 ? range[0] : '',
@@ -362,7 +362,7 @@ async function handleCancel() {
       '确认撤回',
       { confirmButtonText: '确定撤回', cancelButtonText: '取消', type: 'warning' }
     )
-    await cancelFeedback(selectedFeedback.value.id, currentUserId.value)
+    await cancelFeedback(selectedFeedback.value.id)
     ElMessage.success('反馈已撤回')
     selectedFeedback.value = null
     handleSearch()

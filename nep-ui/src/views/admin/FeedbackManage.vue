@@ -3,24 +3,24 @@
     
     <header class="action-console glass-panel fixed-section">
       <div class="console-left">
-        <h2 class="page-title">全量监督流转</h2>
-        <span class="page-subtitle">环境异常反馈的统一调度与全生命周期追踪</span>
+        <h2 class="page-title">反馈工单管理</h2>
+        <span class="page-subtitle">公众监督反馈的统一调度与全生命周期追踪</span>
       </div>
 
       <div class="console-right">
-        <div class="search-capsule">
-          <span class="filter-label">流转状态</span>
-          <el-select v-model="statusFilter" placeholder="全景视图" clearable class="swiss-select" popper-class="swiss-select-dropdown" @change="handleFilterChange">
-            <el-option label="全景视图" value="" />
+        <div class="search-capsule" :class="{ 'is-active': statusFilter }">
+          <span class="filter-label">工单状态</span>
+          <el-select v-model="statusFilter" placeholder="全部工单" clearable class="swiss-select" popper-class="swiss-select-dropdown" @change="handleFilterChange">
+            <el-option label="全部工单" value="" />
             <el-option label="待指派" value="PENDING" />
             <el-option label="已指派" value="ASSIGNED" />
+            <el-option label="检测中" value="PROCESSING" />
             <el-option label="已完成" value="COMPLETED" />
-            <el-option label="已拒绝" value="REJECTED" />
-            <el-option label="已升级" value="ESCALATED" />
+            <el-option label="超时预警" value="ESCALATED" />
           </el-select>
         </div>
-        <el-button class="swiss-btn icon-btn" @click="handleFilterChange" title="刷新流转状态">
-          <el-icon><RefreshRight /></el-icon>
+        <el-button class="swiss-btn icon-btn" @click="refreshData" title="刷新列表">
+          <el-icon :class="{ 'is-spinning': refreshing }"><RefreshRight /></el-icon>
         </el-button>
       </div>
     </header>
@@ -32,12 +32,14 @@
           <span class="batch-text">个工单已选中</span>
         </div>
         <div class="batch-right">
-          <div class="minimal-input-wrapper">
-            <el-icon><User /></el-icon>
-            <input v-model="batchInspectorId" type="number" placeholder="输入网格员ID" class="minimal-input" />
-          </div>
+          <!-- 问题①：批量派送改为按网格员姓名选择 -->
+          <el-select v-model="batchInspectorName" placeholder="选择网格员" filterable style="width:180px">
+            <el-option v-for="ins in inspectorOptions" :key="ins.id"
+                       :label="ins.realName + (ins.employeeCode ? ('（'+ins.employeeCode+'）') : '')"
+                       :value="ins.realName" />
+          </el-select>
           <button class="action-btn primary" @click="handleBatchAssign">
-            <el-icon><Position /></el-icon> 批量指派
+            <el-icon><Position /></el-icon> 批量派送
           </button>
           <button class="action-btn outline" @click="selectedIds = []">取消选中</button>
         </div>
@@ -54,8 +56,8 @@
         <div class="col-supervisor">提报人</div>
         <div class="col-address">隐患地址</div>
         <div class="col-aqi">预估 AQI</div>
-        <div class="col-status">流转状态</div>
-        <div class="col-action">执行调度</div>
+        <div class="col-status">工单状态</div>
+        <div class="col-action">操作</div>
       </div>
 
       <div class="roster-scroll-area">
@@ -99,33 +101,51 @@
             </div>
 
             <div class="col-status">
-              <span class="status-pill" :class="row.status.toLowerCase()">
-                <span class="pill-dot"></span>
-                {{ getStatusText(row) }}
-              </span>
+              <div class="status-cell">
+                <span class="status-pill" :class="row.status.toLowerCase()">
+                  <span class="pill-dot"></span>
+                  {{ getStatusText(row) }}
+                </span>
+                <span class="status-inspector" v-if="row.assignedInspectorId && (row.status === 'ASSIGNED' || row.status === 'PROCESSING')">
+                  {{ inspectorNameById(row.assignedInspectorId) }}
+                </span>
+              </div>
             </div>
 
             <div class="col-action" @click.stop>
-              
-              <div v-if="row.status === 'PENDING'" class="inline-assign">
-                <input v-model="row._inspectorId" type="number" placeholder="ID" class="inline-input" />
-                <button class="icon-action-btn primary" title="直接指派" @click="handleAssign(row)">
-                  <el-icon><Position /></el-icon>
-                </button>
-              </div>
+              <!-- 待指派 / 超时预警：选人 + 指派 + 推荐 -->
+              <template v-if="row.status === 'PENDING' || row.status === 'ESCALATED'">
+                <el-select v-model="row._inspectorName" :placeholder="row.status === 'ESCALATED' ? '紧急指派' : '选择网格员'"
+                           filterable size="small" class="inline-select">
+                  <el-option v-for="ins in inspectorOptions" :key="ins.id"
+                             :label="ins.realName" :value="ins.realName" />
+                </el-select>
+                <div class="action-btn-group">
+                  <button class="assign-btn" title="确认指派" @click="handleAssign(row)">
+                    <el-icon><Position /></el-icon>
+                    <span>指派</span>
+                  </button>
+                  <button class="recommend-btn" title="智能推荐最合适的网格员" @click="openRecommend(row)">
+                    <el-icon><MagicStick /></el-icon>
+                  </button>
+                </div>
+              </template>
 
-              <div v-else-if="row.status === 'ASSIGNED'" class="inline-assign">
-                <button class="action-btn outline small" @click="openTransfer(row)">
-                  <el-icon><Switch /></el-icon> 转派
+              <!-- 已指派 / 检测中：转派 -->
+              <template v-else-if="row.status === 'ASSIGNED' || row.status === 'PROCESSING'">
+                <button class="transfer-btn" @click="openTransfer(row)">
+                  <el-icon><Switch /></el-icon>
+                  <span>转派</span>
                 </button>
-              </div>
-              
-              <div v-else class="inline-assign placeholder"></div>
+              </template>
 
-              <button class="icon-action-btn ghost" title="工单备忘录" @click="openNotes(row)">
+              <!-- 已完成 -->
+              <span v-else class="action-done">-</span>
+
+              <!-- 通用：备注 -->
+              <button class="note-btn" title="工单备注" @click="openNotes(row)">
                 <el-icon><ChatDotRound /></el-icon>
               </button>
-
             </div>
           </div>
         </div>
@@ -136,18 +156,82 @@
       </div>
     </main>
 
+    <!-- ====== 智能推荐网格员 ====== -->
+    <el-dialog v-model="recommendVisible" width="600px" class="recommend-dialog" destroy-on-close :close-on-click-modal="false"
+               :show-close="false">
+      <template #header>
+        <div class="rec-header">
+          <div class="rec-header-left">
+            <div class="rec-icon-box">
+              <el-icon :size="20"><MagicStick /></el-icon>
+            </div>
+            <div>
+              <div class="rec-title">智能推荐指派</div>
+              <div class="rec-subtitle">系统根据网格区域和负载自动推荐最佳人选</div>
+            </div>
+          </div>
+          <button class="rec-close" @click="recommendVisible = false">
+            <el-icon :size="18"><Close /></el-icon>
+          </button>
+        </div>
+      </template>
+
+      <div class="rec-body" v-loading="recommendLoading">
+        <!-- 策略标签 -->
+        <div class="rec-strategy" v-if="recommendType">
+          <div class="strategy-badge" :class="recommendType.toLowerCase()">
+            <span class="strategy-dot"></span>
+            {{ recommendTypeText }}
+          </div>
+          <span class="strategy-desc">本地优先 → 就近异地 → 全局兜底</span>
+        </div>
+
+        <!-- 空态 -->
+        <div v-if="!recommendLoading && recommendList.length === 0" class="rec-empty">
+          <el-icon :size="36"><UserFilled /></el-icon>
+          <p>当前区域暂无可用网格员</p>
+          <span>建议扩大搜索范围或手动指派其他区域网格员</span>
+        </div>
+
+        <!-- 推荐列表 -->
+        <div class="rec-list" v-else-if="!recommendLoading">
+          <div class="rec-card" v-for="(ins, idx) in recommendList" :key="ins.inspectorId"
+               :style="{ animationDelay: (idx * 0.06) + 's' }">
+            <div class="rec-rank">{{ idx + 1 }}</div>
+            <div class="rec-avatar">{{ (ins.realName || '网')[0] }}</div>
+            <div class="rec-info">
+              <div class="rec-name">{{ ins.realName || ('网格员 #' + ins.inspectorId) }}</div>
+              <div class="rec-meta">
+                <span v-if="ins.employeeCode">工号 {{ ins.employeeCode }}</span>
+                <span v-if="ins.phone"> · {{ ins.phone }}</span>
+                <span v-if="ins.cityName"> · {{ ins.cityName }}</span>
+              </div>
+            </div>
+            <button class="rec-assign-btn" @click="handleRecommendAssign(ins.inspectorId)">
+              <el-icon><Position /></el-icon>
+              <span>指派</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
     <el-dialog v-model="transferVisible" title="工单转派" width="440px" class="swiss-dialog" destroy-on-close :close-on-click-modal="false">
       <div class="dialog-form-content">
         <div class="info-row">
           <span class="info-label">原负责网格员</span>
-          <span class="info-value">ID: {{ currentTransferRow?.assignedInspectorId }}</span>
+          <span class="info-value">{{ inspectorNameById(currentTransferRow?.assignedInspectorId) }}</span>
         </div>
         <div class="input-group">
-          <label>新任网格员 ID</label>
-          <div class="minimal-input-wrapper full">
-            <el-icon><User /></el-icon>
-            <input v-model="transferTargetId" type="number" placeholder="输入接手的网格员编号" class="minimal-input" />
-          </div>
+          <label>转派给</label>
+          <!-- 以姓名为主选择新任网格员 -->
+          <el-select v-model="transferTargetName" placeholder="选择新任网格员" filterable style="width:100%">
+            <el-option v-for="ins in inspectorOptions" :key="ins.id"
+                       :label="ins.realName" :value="ins.realName">
+              <span>{{ ins.realName }}</span>
+              <span style="float:right;color:#95a5a6;font-size:12px">{{ ins.employeeCode || ('ID:'+ins.id) }}</span>
+            </el-option>
+          </el-select>
         </div>
       </div>
       <template #footer>
@@ -158,22 +242,65 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="notesVisible" title="工单追踪与备忘" width="560px" class="swiss-dialog" destroy-on-close :close-on-click-modal="false">
-      <div class="notes-timeline">
-        <div v-if="currentNotes.length === 0" class="empty-notes">暂无追踪记录</div>
-        <div v-else class="note-bubble" v-for="note in currentNotes" :key="note.id">
-          <div class="bubble-header">
-            <span class="note-author">{{ note.userName }}</span>
-            <span class="note-time">{{ formatTime(note.createTime) }}</span>
+    <!-- ====== 工单备忘录 ====== -->
+    <el-dialog v-model="notesVisible" width="580px" class="notes-dialog" destroy-on-close :close-on-click-modal="false"
+               :show-close="false">
+      <template #header>
+        <div class="notes-dialog-header">
+          <div class="notes-header-left">
+            <div class="notes-icon-box">
+              <el-icon :size="20"><ChatDotRound /></el-icon>
+            </div>
+            <div>
+              <div class="notes-title">工单备注</div>
+              <div class="notes-subtitle">{{ currentNotes.length }} 条记录</div>
+            </div>
           </div>
-          <div class="bubble-content">{{ note.content }}</div>
+          <button class="notes-close-btn" @click="notesVisible = false">
+            <el-icon :size="18"><Close /></el-icon>
+          </button>
+        </div>
+      </template>
+
+      <!-- 记录列表 -->
+      <div class="notes-body">
+        <div v-if="currentNotes.length === 0" class="notes-empty">
+          <div class="empty-illustration">
+            <el-icon :size="40"><ChatDotRound /></el-icon>
+          </div>
+          <p class="empty-title">暂无备注记录</p>
+          <p class="empty-desc">添加第一条追踪记录，开始管理工单进展</p>
+        </div>
+        <div v-else class="notes-list">
+          <div class="note-item" v-for="note in currentNotes" :key="note.id">
+            <div class="note-avatar">{{ (note.userName || '管')[0] }}</div>
+            <div class="note-card">
+              <div class="note-card-header">
+                <span class="note-card-author">{{ note.userName }}</span>
+                <span class="note-card-time">{{ formatTime(note.createTime) }}</span>
+              </div>
+              <div class="note-card-body">{{ note.content }}</div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="note-composer">
-        <el-input v-model="newNoteContent" type="textarea" :rows="2" placeholder="输入最新追踪进展..." class="swiss-textarea" />
-        <button class="action-btn primary send-btn" @click="handleAddNote">
-          <el-icon><Position /></el-icon>
-        </button>
+
+      <!-- 输入区 -->
+      <div class="notes-footer">
+        <div class="composer-box">
+          <el-input
+            v-model="newNoteContent"
+            type="textarea"
+            :rows="2"
+            placeholder="记录工单进展或备注..."
+            class="composer-input"
+            @keyup.enter.ctrl="handleAddNote"
+          />
+          <button class="composer-send" @click="handleAddNote" :disabled="!newNoteContent.trim()">
+            <el-icon :size="18"><Position /></el-icon>
+          </button>
+        </div>
+        <span class="composer-hint">Ctrl + Enter 快捷发送</span>
       </div>
     </el-dialog>
 
@@ -181,14 +308,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { getFeedbackPage, assignInspector, transferFeedback, batchAssignFeedback } from '@/api/feedback'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { getFeedbackPage, assignInspector, transferFeedback, batchAssignFeedback, recommendInspectors, assignByName } from '@/api/feedback'
+import { getInspectors } from '@/api/user'
 import { getNotesByFeedback, addNote } from '@/api/feedbackNote'
 import { ElMessage } from 'element-plus'
+
+const route = useRoute()
+const router = useRouter()
 import { useUserStore } from '@/stores/user'
-import { 
-  RefreshRight, User, Position, Tickets, UserFilled, 
-  Switch, ChatDotRound
+import {
+  RefreshRight, User, Position, Tickets, UserFilled,
+  Switch, ChatDotRound, MagicStick, Close
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -205,6 +337,9 @@ const statusFilter = ref('')
 // 批量指派逻辑
 const selectedIds = ref([])
 const batchInspectorId = ref(null)
+// 问题①：网格员姓名列表 + 批量派送选中的姓名
+const inspectorOptions = ref([])
+const batchInspectorName = ref('')
 
 const isAllSelected = computed(() => feedbacks.value.length > 0 && selectedIds.value.length === feedbacks.value.length)
 const isIndeterminate = computed(() => selectedIds.value.length > 0 && selectedIds.value.length < feedbacks.value.length)
@@ -217,7 +352,21 @@ const toggleSelectAll = (val) => {
 // 转派状态
 const transferVisible = ref(false)
 const currentTransferRow = ref(null)
-const transferTargetId = ref(null)
+const transferTargetName = ref('')
+
+// 智能推荐指派状态
+const recommendVisible = ref(false)
+const recommendLoading = ref(false)
+const recommendList = ref([])
+const recommendType = ref('')
+const recommendTypeText = ref('')
+const currentRecommendRow = ref(null)
+
+const recommendTagType = computed(() => {
+  if (recommendType.value === 'LOCAL') return 'success'
+  if (recommendType.value === 'REMOTE_PROVINCE') return 'warning'
+  return 'danger'
+})
 
 // 备注状态
 const notesVisible = ref(false)
@@ -245,47 +394,80 @@ function getAqiClass(level) {
 
 function getStatusText(row) {
   const map = {
-    'PENDING': isTimeout(row) ? '超时待办' : '等待指派',
-    'ASSIGNED': `指派给 #${row.assignedInspectorId}`,
-    'COMPLETED': '已处理完成',
-    'REJECTED': '已被拒绝',
-    'ESCALATED': '已升级警告'
+    'PENDING': '待指派',
+    'ASSIGNED': '已指派',
+    'PROCESSING': '检测中',
+    'COMPLETED': '已完成',
+    'ESCALATED': '超时预警'
   }
   return map[row.status] || row.status
 }
 
 // ====== 业务逻辑 ======
 function handleFilterChange() {
+  // 同步 URL，确保顶部栏跳转和下拉筛选行为一致
+  router.replace({ query: statusFilter.value ? { status: statusFilter.value } : {} })
   page.value = 1
   fetch()
 }
 
-async function fetch() {
-  loading.value = true
+async function fetch(showLoading = true) {
+  if (showLoading) loading.value = true
   try {
     const r = await getFeedbackPage(page.value, size.value, statusFilter.value)
-    // 注入前端 _inspectorId 供内联输入
-    feedbacks.value = r.data.map(f => ({ ...f, _inspectorId: null }))
+    feedbacks.value = r.data.map(f => ({ ...f, _inspectorName: '' }))
     total.value = r.total
     selectedIds.value = []
-  } catch (e) {} finally { loading.value = false }
+  } catch (e) { /* 静默 */ }
+  if (showLoading) loading.value = false
 }
 
 async function handleAssign(row) {
-  if (!row._inspectorId) { ElMessage.warning('需输入承接网格员的数字 ID'); return }
+  // 以姓名为主进行指派（ID 仅辅助），调用按姓名派送接口
+  if (!row._inspectorName) { ElMessage.warning('请选择要承接的网格员'); return }
   try {
-    await assignInspector(row.id, row._inspectorId)
+    await assignByName([row.id], row._inspectorName)
+    ElMessage.success(`已派送给 ${row._inspectorName}`)
+    fetch()
+  } catch (e) {}
+}
+
+// 打开智能推荐弹窗
+async function openRecommend(row) {
+  currentRecommendRow.value = row
+  recommendVisible.value = true
+  recommendLoading.value = true
+  recommendList.value = []
+  recommendType.value = ''
+  try {
+    const res = await recommendInspectors(row.id)
+    recommendList.value = res.data.inspectors || []
+    recommendType.value = res.data.assignType
+    recommendTypeText.value = res.data.assignTypeText
+  } catch (e) {
+    recommendList.value = []
+  } finally {
+    recommendLoading.value = false
+  }
+}
+
+// 从推荐列表选中并指派
+async function handleRecommendAssign(inspectorId) {
+  try {
+    await assignInspector(currentRecommendRow.value.id, inspectorId)
     ElMessage.success('工单调度成功')
+    recommendVisible.value = false
     fetch()
   } catch (e) {}
 }
 
 async function handleBatchAssign() {
-  if (!batchInspectorId.value) { ElMessage.warning('需输入承接网格员的数字 ID'); return }
+  // 问题①：按姓名批量派送
+  if (!batchInspectorName.value) { ElMessage.warning('请选择承接网格员'); return }
   try {
-    const res = await batchAssignFeedback(selectedIds.value, batchInspectorId.value)
-    ElMessage.success(`矩阵调度完成: 成功 ${res.data.successCount} / 共 ${res.data.totalCount} 条`)
-    batchInspectorId.value = null
+    const res = await assignByName(selectedIds.value, batchInspectorName.value)
+    ElMessage.success(`派送完成: 成功 ${res.data.successCount} / 共 ${res.data.totalCount} 条`)
+    batchInspectorName.value = ''
     selectedIds.value = []
     fetch()
   } catch (e) {}
@@ -293,15 +475,24 @@ async function handleBatchAssign() {
 
 function openTransfer(row) {
   currentTransferRow.value = row
-  transferTargetId.value = null
+  transferTargetName.value = ''
   transferVisible.value = true
 }
 
+// 根据ID反查网格员姓名（辅助展示，ID为辅、姓名为主）
+function inspectorNameById(id) {
+  if (!id) return '未指派'
+  const ins = inspectorOptions.value.find(i => i.id === id)
+  return ins ? ins.realName : ('网格员 #' + id)
+}
+
 async function handleTransfer() {
-  if (!transferTargetId.value) { ElMessage.warning('需输入新任网格员 ID'); return }
+  if (!transferTargetName.value) { ElMessage.warning('请选择新任网格员'); return }
+  const target = inspectorOptions.value.find(i => i.realName === transferTargetName.value)
+  if (!target) { ElMessage.warning('未找到该网格员'); return }
   try {
-    await transferFeedback(currentTransferRow.value.id, transferTargetId.value)
-    ElMessage.success('工单转派成功')
+    await transferFeedback(currentTransferRow.value.id, target.id)
+    ElMessage.success(`已转派给 ${transferTargetName.value}`)
     transferVisible.value = false
     fetch()
   } catch (e) {}
@@ -318,22 +509,53 @@ async function openNotes(row) {
 }
 
 async function handleAddNote() {
-  if (!newNoteContent.value.trim()) { ElMessage.warning('备忘录内容不可为空'); return }
+  const content = newNoteContent.value.trim()
+  if (!content) { ElMessage.warning('请输入备注内容'); return }
   try {
     await addNote({
       feedbackId: currentNotesFeedbackId.value,
       userId: currentUserId.value,
       userName: currentUserName.value,
-      content: newNoteContent.value
+      content
     })
-    ElMessage.success('追踪记录已归档')
+    ElMessage.success('备注已添加')
     newNoteContent.value = ''
+    // 刷新列表
     const res = await getNotesByFeedback(currentNotesFeedbackId.value)
     currentNotes.value = res.data || []
   } catch (e) {}
 }
 
-onMounted(fetch)
+// 问题①：加载网格员姓名列表供派送下拉
+async function loadInspectors() {
+  try {
+    const res = await getInspectors()
+    inspectorOptions.value = res.data || []
+  } catch (e) { inspectorOptions.value = [] }
+}
+
+const refreshing = ref(false)
+async function refreshData() {
+  refreshing.value = true
+  loading.value = true
+  page.value = 1
+  const minWait = new Promise(r => setTimeout(r, 500))
+  await Promise.all([fetch(false), minWait])
+  loading.value = false
+  refreshing.value = false
+}
+
+// URL 参数 → 筛选 + 拉数据（挂载时立即执行，URL 变化时重新执行）
+watch(() => route.query.status, (s) => {
+  const valid = ['PENDING','ASSIGNED','PROCESSING','COMPLETED','ESCALATED']
+  statusFilter.value = (s && valid.includes(s)) ? s : ''
+  page.value = 1
+  fetch()
+}, { immediate: true })
+
+onMounted(() => {
+  loadInspectors()
+})
 </script>
 
 <style scoped>
@@ -388,11 +610,45 @@ onMounted(fetch)
 .action-btn.ghost { background: transparent; color: #74807B; }
 .action-btn.ghost:hover { background: rgba(0,0,0,0.05); color: #1C2421; }
 
-.icon-action-btn { width: 32px; height: 32px; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 16px; border: none; cursor: pointer; transition: all 0.2s; }
-.icon-action-btn.primary { background: #1C2421; color: white; }
-.icon-action-btn.primary:hover { background: #2A483A; }
-.icon-action-btn.ghost { background: transparent; color: #A0AAB2; }
-.icon-action-btn.ghost:hover { background: rgba(0,0,0,0.05); color: #1C2421; }
+/* ====== 操作按钮组 ====== */
+.inline-select { width: 136px; }
+.inline-select :deep(.el-input__wrapper) { border-radius: 8px; }
+.inline-select :deep(.el-input__inner) { font-size: 12px; }
+.action-btn-group { display: flex; gap: 4px; }
+.assign-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 30px; padding: 0 10px; border-radius: 8px; border: none;
+  background: #1C2421; color: #fff; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.assign-btn:hover { background: #2A483A; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(42,72,58,0.25); }
+.assign-btn:active { transform: scale(0.96); }
+
+.recommend-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: none;
+  background: rgba(103,194,58,0.1); color: #67C23A;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; font-size: 15px;
+}
+.recommend-btn:hover { background: rgba(103,194,58,0.2); transform: scale(1.08); }
+
+.transfer-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid rgba(28,36,33,0.12); background: #fff;
+  color: #74807B; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.transfer-btn:hover { border-color: #1C2421; color: #1C2421; background: #F8FAFC; }
+
+.note-btn {
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  background: transparent; color: #A0AAB2;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; font-size: 15px;
+  margin-left: 4px;
+}
+.note-btn:hover { background: rgba(0,0,0,0.05); color: #1C2421; }
 
 /* 动画 */
 .slide-down-enter-active, .slide-down-leave-active { transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -431,17 +687,20 @@ onMounted(fetch)
 .aqi-danger { background: #FEF2F2; color: #E11D48; border-color: #FECDD3; }
 
 /* 胶囊状态标识 */
-.status-pill { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 12px; background: rgba(28,36,33,0.04); color: #74807B; }
-.pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-cell { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.status-inspector { font-size: 11px; color: #A0AAB2; font-weight: 500; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 10px; white-space: nowrap; }
+.pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .status-pill.pending { background: #FFFBEB; color: #D97706; }
 .status-pill.assigned { background: #EFF6FF; color: #2563EB; }
+.status-pill.processing { background: #F5F3FF; color: #7C3AED; }
 .status-pill.completed { background: #F0FDF4; color: #059669; }
-.status-pill.rejected, .status-pill.escalated { background: #FEF2F2; color: #E11D48; }
+.status-pill.escalated { background: #FEF2F2; color: #E11D48; }
 
 /* 操作区 */
 .col-action { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
 .inline-assign { display: flex; align-items: center; gap: 6px; }
-.inline-assign.placeholder { width: 100px; } /* 占位防抖动 */
+.action-done { font-size: 13px; color: #A0AAB2; padding: 0 8px; }
 .inline-input { width: 60px; height: 32px; border-radius: 8px; border: 1px solid rgba(28,36,33,0.1); background: rgba(255,255,255,0.5); padding: 0 8px; font-family: monospace; font-size: 12px; text-align: center; outline: none; transition: border-color 0.3s; }
 .inline-input:focus { border-color: #1C2421; background: white; }
 
@@ -466,22 +725,106 @@ onMounted(fetch)
 
 .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; }
 
-/* iMessage 级对话备忘录 */
-.notes-timeline { display: flex; flex-direction: column; gap: 16px; max-height: 360px; overflow-y: auto; padding: 16px 0; }
-.notes-timeline::-webkit-scrollbar { width: 4px; }
-.notes-timeline::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
+/* ====== 备忘录弹窗 ====== */
+:deep(.notes-dialog) {
+  background: #fff; border-radius: 24px;
+  box-shadow: 0 24px 64px -16px rgba(0,0,0,0.15);
+}
+:deep(.notes-dialog .el-dialog__header) { padding: 0; margin: 0; border: none; }
+:deep(.notes-dialog .el-dialog__body) { padding: 0; }
 
-.empty-notes { text-align: center; color: #A0AAB2; font-size: 13px; padding: 40px 0; }
-.note-bubble { background: #F4F6F5; padding: 16px; border-radius: 16px; border-bottom-left-radius: 4px; max-width: 90%; align-self: flex-start; }
-.bubble-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
-.note-author { font-size: 13px; font-weight: 700; color: #1C2421; }
-.note-time { font-size: 11px; color: #A0AAB2; font-family: monospace; }
-.bubble-content { font-size: 14px; color: #333; line-height: 1.6; }
+.notes-dialog-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 24px 28px 16px;
+}
+.notes-header-left { display: flex; align-items: center; gap: 14px; }
+.notes-icon-box {
+  width: 42px; height: 42px; border-radius: 14px;
+  background: rgba(42, 72, 58, 0.08); color: #2A483A;
+  display: flex; align-items: center; justify-content: center;
+}
+.notes-title { font-size: 18px; font-weight: 700; color: #1C2421; line-height: 1.3; }
+.notes-subtitle { font-size: 12px; color: #A0AAB2; font-weight: 500; }
+.notes-close-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: rgba(28,36,33,0.04); color: #74807B;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.notes-close-btn:hover { background: rgba(28,36,33,0.1); color: #1C2421; }
 
-.note-composer { display: flex; gap: 12px; margin-top: 16px; align-items: flex-end; }
-.swiss-textarea :deep(.el-textarea__inner) { background: #F4F6F5; border: none; box-shadow: none; border-radius: 16px; padding: 12px 16px; font-size: 14px; color: #1C2421; resize: none; transition: background 0.3s; }
-.swiss-textarea :deep(.el-textarea__inner:focus) { background: white; box-shadow: 0 0 0 1px #2AA876 inset; }
-.send-btn { width: 44px; height: 44px; border-radius: 16px; flex-shrink: 0; padding: 0; display: flex; justify-content: center; align-items: center; font-size: 18px; }
+/* 记录列表区 */
+.notes-body {
+  max-height: 360px; overflow-y: auto; padding: 8px 28px 0;
+}
+.notes-body::-webkit-scrollbar { width: 3px; }
+.notes-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 2px; }
+
+/* 空态 */
+.notes-empty {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 48px 20px; text-align: center;
+}
+.empty-illustration {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(42,72,58,0.04), rgba(42,72,58,0.08));
+  display: flex; align-items: center; justify-content: center;
+  color: #2A483A; margin-bottom: 16px;
+}
+.empty-title { font-size: 15px; font-weight: 600; color: #1C2421; margin: 0 0 6px; }
+.empty-desc { font-size: 13px; color: #A0AAB2; margin: 0; }
+
+/* 记录条目 */
+.notes-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.note-item { display: flex; gap: 12px; }
+.note-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #2A483A, #3D6B54);
+  color: #fff; font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(42,72,58,0.15);
+}
+.note-card {
+  flex: 1; background: #F8FAFC; border-radius: 16px;
+  padding: 14px 18px; min-width: 0;
+  border: 1px solid rgba(28,36,33,0.04);
+  transition: all 0.2s;
+}
+.note-card:hover { background: #F1F5F9; }
+.note-card-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.note-card-author { font-size: 13px; font-weight: 700; color: #1C2421; }
+.note-card-time { font-size: 11px; color: #A0AAB2; font-family: 'SF Mono', monospace; }
+.note-card-body { font-size: 14px; color: #334155; line-height: 1.65; word-break: break-word; }
+
+/* 底部输入区 */
+.notes-footer { padding: 16px 28px 24px; }
+.composer-box {
+  display: flex; gap: 10px; align-items: flex-end;
+  background: #F4F6F5; border-radius: 18px;
+  padding: 6px 6px 6px 18px;
+  border: 1px solid transparent;
+  transition: all 0.25s;
+}
+.composer-box:focus-within {
+  background: #fff; border-color: rgba(42,72,58,0.15);
+  box-shadow: 0 0 0 3px rgba(42,72,58,0.04);
+}
+.composer-input { flex: 1; }
+.composer-input :deep(.el-textarea__inner) {
+  background: transparent !important; border: none !important;
+  box-shadow: none !important; padding: 4px 0; font-size: 14px;
+  color: #1C2421; resize: none; line-height: 1.5;
+}
+.composer-input :deep(.el-textarea__inner::placeholder) { color: #A0AAB2; }
+.composer-send {
+  width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+  background: #2A483A; color: #fff; border: none;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.composer-send:hover:not(:disabled) { background: #1C2421; transform: scale(1.05); }
+.composer-send:disabled { background: #D0D5D9; cursor: not-allowed; }
+.composer-hint { font-size: 11px; color: #C5CAD0; margin-top: 8px; display: block; text-align: right; }
 
 /* 工具提示 */
 .alpine-tooltip.el-popper { background: #1C2421 !important; color: white !important; font-weight: 600 !important; border: none !important; border-radius: 8px !important; padding: 8px 12px !important; box-shadow: 0 8px 24px rgba(28, 36, 33, 0.2) !important; }
@@ -497,4 +840,107 @@ onMounted(fetch)
 .swiss-select .el-input__wrapper { background: transparent !important; box-shadow: none !important; }
 .swiss-select-dropdown { background: rgba(255, 255, 255, 0.85) !important; backdrop-filter: blur(24px) !important; border: 1px solid rgba(255, 255, 255, 0.9) !important; border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08) !important; }
 .swiss-select-dropdown .el-select-dropdown__item.selected { color: #2A483A !important; font-weight: 600 !important; }
+
+/* ====== 智能推荐对话框 ====== */
+:deep(.recommend-dialog) { background: #fff; border-radius: 24px; box-shadow: 0 24px 64px -16px rgba(0,0,0,0.12); }
+:deep(.recommend-dialog .el-dialog__header) { padding: 0; margin: 0; border: none; }
+:deep(.recommend-dialog .el-dialog__body) { padding: 0; }
+
+.rec-header { display: flex; justify-content: space-between; align-items: center; padding: 24px 28px 16px; }
+.rec-header-left { display: flex; align-items: center; gap: 14px; }
+.rec-icon-box {
+  width: 42px; height: 42px; border-radius: 14px; display: flex;
+  align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(103,194,58,0.1), rgba(103,194,58,0.2));
+  color: #67C23A;
+}
+.rec-title { font-size: 18px; font-weight: 700; color: #1C2421; line-height: 1.3; }
+.rec-subtitle { font-size: 12px; color: #A0AAB2; font-weight: 500; }
+.rec-close {
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: rgba(28,36,33,0.04); color: #74807B;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.rec-close:hover { background: rgba(28,36,33,0.1); color: #1C2421; }
+
+.rec-body { padding: 0 28px 24px; min-height: 120px; }
+
+/* 策略标签 */
+.rec-strategy { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid rgba(28,36,33,0.05); }
+.strategy-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 700;
+}
+.strategy-badge.local { background: rgba(103,194,58,0.1); color: #67C23A; }
+.strategy-badge.remote_province { background: rgba(245,166,35,0.1); color: #D97706; }
+.strategy-badge.remote { background: rgba(64,158,255,0.1); color: #2563EB; }
+.strategy-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.strategy-desc { font-size: 12px; color: #A0AAB2; font-weight: 500; }
+
+/* 空态 */
+.rec-empty {
+  display: flex; flex-direction: column; align-items: center; padding: 40px 20px;
+  text-align: center; color: #A0AAB2;
+}
+.rec-empty .el-icon { margin-bottom: 12px; opacity: 0.4; }
+.rec-empty p { font-size: 14px; font-weight: 600; color: #74807B; margin: 0 0 4px; }
+.rec-empty span { font-size: 12px; }
+
+/* 推荐卡片列表 */
+.rec-list { display: flex; flex-direction: column; gap: 10px; }
+.rec-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; background: #F8FAFC; border-radius: 14px;
+  border: 1px solid rgba(28,36,33,0.04);
+  animation: cardSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: all 0.25s;
+}
+.rec-card:hover {
+  background: #fff; border-color: rgba(103,194,58,0.2);
+  box-shadow: 0 4px 16px -4px rgba(103,194,58,0.12);
+  transform: translateX(4px);
+}
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rec-rank {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; background: rgba(28,36,33,0.05); color: #74807B;
+}
+.rec-card:first-child .rec-rank { background: #67C23A; color: #fff; }
+
+.rec-avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #2A483A, #3D6B54);
+  color: #fff; font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.rec-info { flex: 1; min-width: 0; }
+.rec-name { font-size: 14px; font-weight: 700; color: #1C2421; margin-bottom: 2px; }
+.rec-meta { font-size: 11px; color: #A0AAB2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.rec-assign-btn {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  height: 32px; padding: 0 16px; border-radius: 10px; border: none;
+  background: linear-gradient(135deg, #1C2421, #2A483A); color: #fff;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: all 0.2s;
+}
+.rec-assign-btn:hover { transform: scale(1.04); box-shadow: 0 4px 12px rgba(42,72,58,0.3); }
+.rec-assign-btn:active { transform: scale(0.96); }
+
+/* 筛选激活时边框高亮 */
+.search-capsule.is-active {
+  border-color: rgba(42, 72, 58, 0.2) !important;
+  box-shadow: 0 4px 16px -4px rgba(42, 72, 58, 0.08) !important;
+}
+
+/* 刷新旋转 */
+.is-spinning { animation: spin 0.6s linear; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

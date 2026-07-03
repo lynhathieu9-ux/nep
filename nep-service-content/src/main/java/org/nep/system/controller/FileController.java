@@ -7,11 +7,18 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.nep.common.result.Result;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -87,6 +94,93 @@ public class FileController {
             log.error("本地文件保存失败", e);
             return Result.fail("上传失败: " + e.getMessage());
         }
+    }
+
+    // ==================== 问题④：通用图片上传（环保资讯等） ====================
+
+    @Operation(summary = "上传图片（环保资讯配图等，MinIO优先降级本地，问题④）")
+    @PostMapping("/image")
+    public Result<String> uploadImage(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) return Result.fail("文件为空");
+        if (file.getSize() > 5 * 1024 * 1024) return Result.fail("图片大小不能超过5MB");
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/"))
+            return Result.fail("只允许上传图片文件");
+
+        String ext = getExtension(file.getOriginalFilename());
+        String filename = "news/" + UUID.randomUUID() + ext;
+        return doUpload(file, filename, contentType);
+    }
+
+    // ==================== 问题⑤：知识库附件上传 + 下载 ====================
+
+    @Operation(summary = "上传知识库附件（支持pdf/doc等，问题⑤）")
+    @PostMapping("/doc")
+    public Result<String> uploadDoc(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) return Result.fail("文件为空");
+        if (file.getSize() > 50 * 1024 * 1024) return Result.fail("文件大小不能超过50MB");
+        String ext = getDocExtension(file.getOriginalFilename());
+        String filename = "doc/" + UUID.randomUUID() + ext;
+        return doUpload(file, filename, file.getContentType());
+    }
+
+    /**
+     * 问题⑤：文件下载。从本地 uploads 目录按相对路径读取文件流并以附件形式响应。
+     * <p>path 支持传 "/images/doc/xxx.pdf" 或 "doc/xxx.pdf"，做了目录穿越防护。</p>
+     */
+    @Operation(summary = "文件下载（知识库附件等，问题⑤）")
+    @GetMapping("/download")
+    public ResponseEntity<Resource> download(@RequestParam("path") String path,
+                                             @RequestParam(value = "name", required = false) String downloadName) {
+        // 归一化相对路径：去掉 /images/ 前缀，防目录穿越
+        String rel = path.replace("\\", "/");
+        if (rel.startsWith("/images/")) rel = rel.substring("/images/".length());
+        if (rel.startsWith("images/")) rel = rel.substring("images/".length());
+        if (rel.contains("..")) {
+            return ResponseEntity.badRequest().build();
+        }
+        Path file = Paths.get(LOCAL_UPLOAD_DIR, rel).normalize();
+        // 二次校验：必须仍在 uploads 目录内
+        if (!file.startsWith(Paths.get(LOCAL_UPLOAD_DIR))) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (!Files.exists(file)) {
+            return ResponseEntity.notFound().build();
+        }
+        Resource resource = new FileSystemResource(file.toFile());
+        String fname = (downloadName != null && !downloadName.isEmpty())
+                ? downloadName : file.getFileName().toString();
+        String encoded = URLEncoder.encode(fname, StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encoded)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
+    }
+
+    /** 抽取的双模上传：MinIO 优先，失败降级本地 */
+    private Result<String> doUpload(MultipartFile file, String filename, String contentType) {
+        if (isMinioAvailable()) {
+            try {
+                String url = uploadToMinio(file, filename, contentType);
+                return Result.ok("上传成功", url);
+            } catch (Exception e) {
+                log.warn("MinIO 上传失败，降级为本地存储: {}", e.getMessage());
+                minioAvailable = false;
+                lastMinioCheck = System.currentTimeMillis();
+            }
+        }
+        try {
+            String url = uploadToLocal(file, filename);
+            return Result.ok("上传成功（本地存储）", url);
+        } catch (IOException e) {
+            log.error("本地文件保存失败", e);
+            return Result.fail("上传失败: " + e.getMessage());
+        }
+    }
+
+    private String getDocExtension(String filename) {
+        if (filename == null || !filename.contains(".")) return ".dat";
+        return filename.substring(filename.lastIndexOf(".")).toLowerCase();
     }
 
     // ==================== MinIO 上传 ====================
