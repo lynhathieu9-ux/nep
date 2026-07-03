@@ -12,39 +12,39 @@
         </div>
       </div>
       <div class="console-right">
-        <span class="meta-badge">{{ catLabel(document?.category) }}</span>
-        <span class="meta-badge outline">浏览 {{ document?.viewCount || 0 }} 次</span>
+        <span class="meta-badge">{{ catLabel(docData?.category) }}</span>
+        <span class="meta-badge outline">浏览 {{ docData?.viewCount || 0 }} 次</span>
       </div>
     </header>
 
     <main class="stretch-section scrollable-card">
-      <div class="reader-area scroll-area" v-if="document">
+      <div class="reader-area scroll-area" v-if="docData">
 
         <article class="paper-canvas">
 
           <!-- 封面图 -->
-          <div class="article-cover" v-if="document.coverImage">
-            <img :src="document.coverImage" alt="文献封面" />
+          <div class="article-cover" v-if="docData.coverImage">
+            <img :src="docData.coverImage" alt="文献封面" />
           </div>
 
           <header class="paper-header">
-            <div class="doc-code">档案卷宗编号：{{ String(document.id).padStart(6, '0') }}</div>
-            <h1 class="doc-title">{{ document.title }}</h1>
+            <div class="doc-code">档案卷宗编号：{{ String(docData.id).padStart(6, '0') }}</div>
+            <h1 class="doc-title">{{ docData.title }}</h1>
             <div class="doc-meta-strip">
-              <span class="meta-tag">{{ catLabel(document.category) }}</span>
+              <span class="meta-tag">{{ catLabel(docData.category) }}</span>
               <span class="meta-divider"></span>
-              <span class="meta-item">来源：{{ document.source || '东软环保公众监督系统' }}</span>
+              <span class="meta-item">来源：{{ docData.source || '东软环保公众监督系统' }}</span>
               <span class="meta-divider"></span>
-              <span class="meta-item">发布时间：{{ formatTime(document.createTime) }}</span>
+              <span class="meta-item">发布时间：{{ formatTime(docData.createTime) }}</span>
             </div>
           </header>
 
-          <div class="paper-abstract" v-if="document.summary">
+          <div class="paper-abstract" v-if="docData.summary">
             <div class="abstract-label">【内容提要】</div>
-            <p>{{ document.summary }}</p>
+            <p>{{ docData.summary }}</p>
           </div>
 
-          <div class="paper-body html-content" v-html="document.content || '<p class=empty-hint>暂无正文内容</p>'"></div>
+          <div class="paper-body html-content" v-html="docData.content || '<p class=empty-hint>暂无正文内容</p>'"></div>
 
           <!-- 附件区域：仅在确实有附件时显示 -->
           <footer class="paper-footer" v-if="attachments.length > 0">
@@ -70,7 +70,7 @@
 
       </div>
 
-      <div v-if="!loading && !document" class="empty-state-wrapper glass-panel">
+      <div v-if="!loading && !docData" class="empty-state-wrapper glass-panel">
         <el-empty description="该文献已被撤档或不存在" />
       </div>
     </main>
@@ -88,12 +88,12 @@ import { Back, Download, Document, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
-const document = ref(null)
+const docData = ref(null)
 const loading = ref(false)
 
 // 解析附件 JSON 数组
 const attachments = computed(() => {
-  const doc = document.value
+  const doc = docData.value
   if (!doc || !doc.attachmentUrl) return []
   return parseAttachments(doc.attachmentUrl)
 })
@@ -179,9 +179,10 @@ onMounted(async () => {
   loading.value = true
   try {
     const res = await getKnowledgeById(route.params.id)
-    document.value = res.data
+    docData.value = res.data
   } catch (e) {
-    console.error(e)
+    console.error('知识库详情加载失败:', e)
+    docData.value = null
   } finally {
     loading.value = false
   }

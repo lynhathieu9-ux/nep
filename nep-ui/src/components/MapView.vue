@@ -1,6 +1,5 @@
 <template>
   <div class="map-view-container" ref="containerRef">
-    <!-- 顶部控制栏 -->
     <div class="map-toolbar">
       <div class="toolbar-left">
         <el-button v-if="currentLevel === 'city'" size="small" @click="backToChina" :icon="ArrowLeft" round>
@@ -10,14 +9,12 @@
       </div>
 
       <div class="toolbar-right">
-        <!-- 时间维度 -->
         <el-select v-model="timeRange" size="small" style="width:110px" @change="refreshMap">
           <el-option label="今日" value="today" />
           <el-option label="近7天" value="week" />
           <el-option label="当月" value="month" />
         </el-select>
 
-        <!-- 污染物维度 -->
         <el-select v-model="pollutant" size="small" style="width:110px" @change="refreshMap">
           <el-option label="综合AQI" value="aqi" />
           <el-option label="PM2.5" value="pm25" />
@@ -29,32 +26,28 @@
       </div>
     </div>
 
-    <!-- 地图容器 -->
     <div ref="chartRef" class="chart-box">
-      <!-- 毛玻璃 Loading 遮罩 -->
       <transition name="fade">
         <div v-if="mapLoading" class="loading-overlay">
           <div class="loading-spinner">
             <div class="spinner-ring"></div>
-            <span>地图数据加载中...</span>
+            <span>地图加载中...</span>
           </div>
         </div>
       </transition>
     </div>
 
-    <!-- 左下角图例 (compact capsule) -->
     <div class="map-legend-bottom">
-      <div class="legend-title">AQI 空气质量指数</div>
+      <div class="legend-title">AQI 污染等级</div>
       <div class="legend-capsules">
         <div v-for="item in aqiLevels" :key="item.label" class="legend-capsule">
           <span class="capsule-color" :style="{ background: item.color }"></span>
-          <span class="capsule-range">{{ item.range }}</span>
           <span class="capsule-label">{{ item.label }}</span>
+          <span class="capsule-range">{{ item.range }}</span>
         </div>
       </div>
     </div>
 
-    <!-- 右侧 TOP5 污染榜 (省份级视图显示) -->
     <transition name="slide-right">
       <div v-if="currentLevel === 'china' && topCities.length > 0" class="side-panel top-panel">
         <div class="panel-title">🔴 污染 TOP5 城市</div>
@@ -71,7 +64,6 @@
       </div>
     </transition>
 
-    <!-- 左侧趋势小图 (省份级视图) -->
     <transition name="slide-left">
       <div v-if="currentLevel === 'city'" class="side-panel trend-panel">
         <div class="panel-title">📈 {{ currentProvinceName }} 近7日趋势</div>
@@ -89,22 +81,22 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 
 // ==================== 国标 AQI 六色 ====================
 const aqiLevels = [
-  { min: 0, max: 50, color: '#00E400', label: '优', range: '0-50' },
-  { min: 51, max: 100, color: '#FFFF00', label: '良', range: '51-100' },
-  { min: 101, max: 150, color: '#FF7E00', label: '轻度', range: '101-150' },
-  { min: 151, max: 200, color: '#FF0000', label: '中度', range: '151-200' },
-  { min: 201, max: 300, color: '#99004C', label: '重度', range: '201-300' },
-  { min: 301, max: 9999, color: '#7E0023', label: '严重', range: '>300' }
+  { min: 0, max: 50, color: '#059669', label: '优', range: '0-50' },
+  { min: 51, max: 100, color: '#D97706', label: '良', range: '51-100' },
+  { min: 101, max: 150, color: '#F59E0B', label: '轻度', range: '101-150' },
+  { min: 151, max: 200, color: '#E11D48', label: '中度', range: '151-200' },
+  { min: 201, max: 300, color: '#9F1239', label: '重度', range: '201-300' },
+  { min: 301, max: 9999, color: '#4C0519', label: '严重', range: '>300' }
 ]
 
-const OFFLINE_COLOR = '#D0D0D0'
+const OFFLINE_COLOR = '#E2E8F0'
 
 function getAqiColor(value) {
   if (value == null || value < 0) return OFFLINE_COLOR
   for (const lvl of aqiLevels) {
     if (value <= lvl.max) return lvl.color
   }
-  return '#7E0023'
+  return '#4C0519'
 }
 
 function getAqiLabel(value) {
@@ -115,7 +107,6 @@ function getAqiLabel(value) {
   return '严重'
 }
 
-// ==================== 状态 ====================
 const containerRef = ref(null)
 const chartRef = ref(null)
 const trendChartRef = ref(null)
@@ -133,7 +124,6 @@ const cityData = ref([])
 const provinceData = ref([])
 const geoCache = {}
 
-// ==================== 计算属性 ====================
 const maxAqi = computed(() => {
   if (cityData.value.length === 0) return 300
   return Math.max(...cityData.value.map(c => c.avgAqi || 0), 100)
@@ -146,7 +136,6 @@ const topCities = computed(() => {
     .slice(0, 5)
 })
 
-// ==================== 省份下钻映射 ====================
 const PROVINCE_NAME_MAP = {
   '北京': 110000, '北京市': 110000, '天津': 120000, '天津市': 120000,
   '河北省': 130000, '河北': 130000, '山西省': 140000, '山西': 140000,
@@ -182,7 +171,6 @@ function matchProvinceName(name) {
   return [name, short]
 }
 
-// ==================== GeoJSON ====================
 const CHINA_GEO_URL = 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json'
 
 async function loadGeoJSON(url) {
@@ -194,7 +182,6 @@ async function loadGeoJSON(url) {
   return json
 }
 
-// ==================== 数据加载 ====================
 async function fetchData() {
   try {
     const res = await getMapAqi()
@@ -212,7 +199,6 @@ async function refreshMap() {
   else await drillToProvince(currentProvinceName.value, currentProvinceCode.value)
 }
 
-// ==================== 中国地图渲染 ====================
 async function renderChinaMap() {
   if (!chart) return
   mapLoading.value = true
@@ -221,7 +207,6 @@ async function renderChinaMap() {
     const chinaGeo = await loadGeoJSON(CHINA_GEO_URL)
     echarts.registerMap('china', chinaGeo)
 
-    // 省份→AQI映射 (适配GeoJSON中的name格式)
     const provMap = {}
     provinceData.value.forEach(p => {
       if (p.provinceName) {
@@ -230,12 +215,10 @@ async function renderChinaMap() {
       }
     })
 
-    // 标记离线省份 (有GeoJSON但无数据)
     const offlineProvinces = []
     chinaGeo.features.forEach(f => {
       const name = f.properties.name
       if (!provMap[name]) {
-        // 尝试模糊匹配
         let matched = false
         for (const [key] of Object.entries(provMap)) {
           if (key.includes(name) || name.includes(key)) { matched = true; break }
@@ -244,7 +227,6 @@ async function renderChinaMap() {
       }
     })
 
-    // 污染极值散点 (取TOP5省份中心坐标)
     const scatterData = provinceData.value
       .filter(p => p.avgAqi > 100)
       .slice(0, 5)
@@ -287,7 +269,6 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
     hasData: info.aqi != null
   }))
 
-  // 离线数据补充
   offlineProvinces.forEach(name => {
     if (!dataPoints.find(d => d.name === name)) {
       dataPoints.push({ name, value: -1, count: 0, maxAqi: 0, hasData: false })
@@ -315,7 +296,7 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
         const color = getAqiColor(d.value)
         const label = getAqiLabel(d.value)
         const trend = Math.random() > 0.5 ? '↑' : '↓'
-        const trendColor = trend === '↑' ? '#ff4444' : '#44bb44'
+        const trendColor = trend === '↑' ? '#E11D48' : '#059669'
         return `<div style="text-align:center">
           <strong style="font-size:15px">${params.name}</strong>
           <div style="margin:8px 0;font-size:32px;font-weight:700;color:${color}">${Math.round(d.value)}</div>
@@ -328,17 +309,11 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
       }
     },
     visualMap: {
+      show: false,
       type: 'piecewise',
       pieces: aqiLevels.map(l => ({
         min: l.min, max: l.max, color: l.color, label: l.label
       })),
-      left: 12,
-      bottom: 50,
-      itemWidth: 16,
-      itemHeight: 10,
-      itemGap: 6,
-      textStyle: { color: '#8899aa', fontSize: 11 },
-      orient: 'horizontal',
       inRange: { color: aqiLevels.map(l => l.color) },
       outOfRange: { color: OFFLINE_COLOR }
     },
@@ -356,11 +331,10 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
       },
       emphasis: {
         label: { show: true, fontSize: 13, color: '#333' },
-        itemStyle: { areaColor: '#ffe0b2', shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.15)' }
+        itemStyle: { areaColor: '#FFFBEB', shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.1)' }
       }
     },
     series: [
-      // 地图底图层
       {
         name: 'AQI分布',
         type: 'map',
@@ -374,11 +348,10 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
         itemStyle: { borderColor: '#fff', borderWidth: 1.5 },
         emphasis: {
           label: { show: true, fontSize: 13 },
-          itemStyle: { areaColor: '#ffe0b2', shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.15)' }
+          itemStyle: { areaColor: '#FFFBEB', shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.1)' }
         },
         data: dataPoints
       },
-      // 涟漪散点层 (高污染热点)
       {
         name: '污染热点',
         type: 'effectScatter',
@@ -390,14 +363,14 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
           brushType: 'stroke',
           scale: 3,
           period: 7,
-          color: '#ff3333'
+          color: '#E11D48'
         },
-        itemStyle: { color: '#ff0000', shadowBlur: 20, shadowColor: 'rgba(255,0,0,0.4)' },
+        itemStyle: { color: '#E11D48', shadowBlur: 20, shadowColor: 'rgba(225,29,72,0.4)' },
         label: {
           show: true,
           formatter: '{b}',
           position: 'top',
-          color: '#333',
+          color: '#1D1D1F',
           fontSize: 11
         },
         zlevel: 1
@@ -406,7 +379,6 @@ function buildChinaOption(provMap, offlineProvinces, scatterData) {
   }
 }
 
-// ==================== 省份下钻 ====================
 async function drillToProvince(name, code) {
   if (!chart) return
   mapLoading.value = true
@@ -419,11 +391,9 @@ async function drillToProvince(name, code) {
     const mapName = `province_${code}`
     echarts.registerMap(mapName, provGeo)
 
-    // 构建城市AQI映射
     const cityMap = {}
     cityData.value.forEach(c => {
       if (c.provinceName && matchProvinceName(c.provinceName).some(n => n === name || name.includes(n) || n.includes(name))) {
-        // 适配GeoJSON城市名
         const shortName = c.cityName.replace(/市|州|地区|盟|自治州/g, '')
         cityMap[shortName] = { aqi: c.avgAqi, count: c.detectionCount, maxAqi: c.maxAqi }
         cityMap[c.cityName] = { aqi: c.avgAqi, count: c.detectionCount, maxAqi: c.maxAqi }
@@ -465,15 +435,9 @@ async function drillToProvince(name, code) {
         }
       },
       visualMap: {
+        show: false,
         type: 'piecewise',
         pieces: aqiLevels.map(l => ({ min: l.min, max: l.max, color: l.color, label: l.label })),
-        left: 12,
-        bottom: 50,
-        itemWidth: 16,
-        itemHeight: 10,
-        itemGap: 6,
-        textStyle: { color: '#8899aa', fontSize: 11 },
-        orient: 'horizontal',
         outOfRange: { color: OFFLINE_COLOR }
       },
       series: [{
@@ -482,21 +446,19 @@ async function drillToProvince(name, code) {
         roam: true,
         zoom: 1.2,
         scaleLimit: { min: 1, max: 8 },
-        label: { show: true, fontSize: 9, color: '#555' },
+        label: { show: true, fontSize: 10, color: '#475569' },
         itemStyle: { borderColor: '#fff', borderWidth: 1.2 },
         emphasis: {
-          label: { show: true, fontSize: 12 },
-          itemStyle: { areaColor: '#ffe0b2', shadowBlur: 16, shadowColor: 'rgba(0,0,0,0.12)' }
+          label: { show: true, fontSize: 12, color: '#1D1D1F' },
+          itemStyle: { areaColor: '#FFFBEB', shadowBlur: 16, shadowColor: 'rgba(0,0,0,0.1)' }
         },
         data: dataPoints
       }]
     }
 
-    // 动画过渡
     chart.setOption(option, false)
     currentLevel.value = 'city'
 
-    // 渲染趋势小图
     await nextTick()
     renderTrendChart()
   } catch (e) {
@@ -506,7 +468,6 @@ async function drillToProvince(name, code) {
   }
 }
 
-// ==================== 趋势小图 ====================
 function renderTrendChart() {
   if (!trendChartRef.value) return
   if (trendChart) trendChart.dispose()
@@ -535,21 +496,19 @@ function renderTrendChart() {
     },
     series: [{
       type: 'line', data: vals, smooth: true, symbol: 'circle', symbolSize: 4,
-      lineStyle: { width: 2, color: '#409EFF', shadowBlur: 8, shadowColor: 'rgba(64,158,255,0.4)' },
+      lineStyle: { width: 2, color: '#0284C7', shadowBlur: 8, shadowColor: 'rgba(2,132,199,0.3)' },
       areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-        { offset: 0, color: 'rgba(64,158,255,0.2)' }, { offset: 1, color: 'rgba(64,158,255,0)' }
+        { offset: 0, color: 'rgba(2,132,199,0.2)' }, { offset: 1, color: 'rgba(2,132,199,0)' }
       ])},
-      itemStyle: { color: '#409EFF' }
+      itemStyle: { color: '#0284C7' }
     }]
   })
 }
 
-// ==================== 返回全国 ====================
 async function backToChina() {
   await renderChinaMap()
 }
 
-// ==================== 省份中心坐标 ====================
 function getProvinceCenter(adcode) {
   const centers = {
     110000: [116.4, 39.9], 120000: [117.2, 39.1], 130000: [114.5, 38.0],
@@ -567,7 +526,6 @@ function getProvinceCenter(adcode) {
   return centers[adcode] || [null, null]
 }
 
-// ==================== 生命周期 ====================
 onMounted(async () => {
   await fetchData()
   if (chartRef.value) {
@@ -590,15 +548,22 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ========== 【核心修复 1】彻底解除死锁高度 ========== */
 .map-view-container {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 620px;
-  border-radius: 16px;
+  /* 移除了原有的 min-height: 620px，将高度控制权完全交给父级弹性布局，根绝溢出裁切 */
+  border-radius: inherit;
   overflow: hidden;
-  background: #f0f2f5;
-  border: 1px solid rgba(255,255,255,0.1);
+  background: #F8FAFC;
+}
+
+.chart-box {
+  width: 100%; 
+  height: 100%; 
+  /* 同样移除死板高度，完全自适应 */
+  position: relative;
 }
 
 /* ========== 顶部工具栏 ========== */
@@ -612,82 +577,121 @@ onUnmounted(() => {
   padding: 10px 16px;
   background: linear-gradient(180deg, rgba(255,255,255,0.95) 60%, rgba(255,255,255,0) 100%);
   backdrop-filter: blur(8px);
-  border-radius: 16px 16px 0 0;
 }
 .toolbar-left { display: flex; align-items: center; gap: 10px; }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
-.current-label { font-size: 13px; font-weight: 600; color: #444; }
-
-/* ========== 地图画布 ========== */
-.chart-box {
-  width: 100%; height: 100%; min-height: 620px;
-  position: relative;
-}
+.current-label { font-size: 13px; font-weight: 600; color: #475569; }
 
 /* ========== Loading 毛玻璃遮罩 ========== */
 .loading-overlay {
   position: absolute; inset: 0;
-  background: rgba(255,255,255,0.7);
+  background: rgba(248, 250, 252, 0.7);
   backdrop-filter: blur(6px);
   z-index: 20;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 16px;
 }
 .loading-spinner { text-align: center; }
 .spinner-ring {
-  width: 40px; height: 40px; margin: 0 auto 12px;
-  border: 3px solid #e0e0e0;
-  border-top-color: #409EFF;
+  width: 36px; height: 36px; margin: 0 auto 12px;
+  border: 3px solid #E2E8F0;
+  border-top-color: #0284C7;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-spinner span { color: #666; font-size: 13px; }
+.loading-spinner span { color: #64748B; font-size: 13px; font-weight: 500;}
 
-/* ========== 底部图例 ========== */
+/* ========== 【核心修复 2】底部居中规整图例 ========== */
 .map-legend-bottom {
-  position: absolute; bottom: 12px; left: 12px;
+  position: absolute;
+  bottom: 24px; /* 预留充足的底部安全边距，避免触底 */
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
-  background: rgba(255,255,255,0.94);
-  backdrop-filter: blur(8px);
-  border-radius: 10px;
-  padding: 8px 14px;
-  border: 1px solid rgba(0,0,0,0.06);
+  background: rgba(255, 255, 255, 0.85); /* 极简毛玻璃质感 */
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 12px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: max-content;
+  max-width: 95%; /* 小屏幕防溢出换行保护 */
+  flex-wrap: wrap;
+  justify-content: center;
 }
-.legend-title { font-size: 11px; font-weight: 600; color: #666; margin-bottom: 6px; }
-.legend-capsules { display: flex; flex-wrap: wrap; gap: 8px; }
-.legend-capsule { display: flex; align-items: center; gap: 4px; }
-.capsule-color { width: 16px; height: 8px; border-radius: 3px; flex-shrink: 0; }
-.capsule-range { font-size: 10px; color: #999; min-width: 32px; }
-.capsule-label { font-size: 10px; color: #666; font-weight: 500; }
+.legend-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  padding-right: 16px;
+  border-right: 1px solid rgba(0, 0, 0, 0.08); /* 竖线分割标题与图例项 */
+}
+.legend-capsules {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap; /* 允许在极端窄屏时折行 */
+  justify-content: center;
+}
+.legend-capsule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.capsule-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px; /* 统一尺寸和圆角 */
+  flex-shrink: 0;
+}
+.capsule-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.capsule-range {
+  font-size: 12px;
+  color: #94A3B8;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-feature-settings: "tnum"; 
+}
 
-/* ========== 侧边面板 ========== */
+/* ========== 侧边悬浮面板 ========== */
 .side-panel {
   position: absolute;
   z-index: 10;
-  background: rgba(255,255,255,0.94);
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
   border-radius: 12px;
   padding: 14px 16px;
-  border: 1px solid rgba(0,0,0,0.06);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  max-height: calc(100% - 100px); /* 【核心修复 3】防止右侧面板向下溢出 */
+  overflow-y: auto;
 }
-.top-panel { top: 60px; right: 12px; width: 220px; }
-.trend-panel { top: 60px; left: 12px; width: 220px; }
-.panel-title { font-size: 12px; font-weight: 600; color: #444; margin-bottom: 10px; }
+/* 隐藏面板内置滚动条保持整洁 */
+.side-panel::-webkit-scrollbar { display: none; }
+.side-panel { -ms-overflow-style: none; scrollbar-width: none; }
+
+.top-panel { top: 60px; right: 16px; width: 220px; }
+.trend-panel { top: 60px; left: 16px; width: 220px; }
+.panel-title { font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 12px; }
 
 .top-item {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
   font-size: 12px;
 }
-.top-rank { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; background: #eee; color: #999; }
-.top-rank.rank-1 { background: #ff4444; color: #fff; }
-.top-rank.rank-2 { background: #ff8833; color: #fff; }
-.top-rank.rank-3 { background: #ffaa22; color: #fff; }
-.top-name { flex: 1; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.top-bar-wrap { width: 50px; height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
-.top-bar { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
-.top-value { font-weight: 700; font-size: 12px; min-width: 30px; text-align: right; }
+.top-rank { width: 16px; height: 16px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 10px; background: #F1F5F9; color: #94A3B8; }
+.top-rank.rank-1 { background: #E11D48; color: #fff; }
+.top-rank.rank-2 { background: #D97706; color: #fff; }
+.top-rank.rank-3 { background: #F59E0B; color: #fff; }
+.top-name { flex: 1; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-bar-wrap { width: 46px; height: 4px; background: #F1F5F9; border-radius: 2px; overflow: hidden; }
+.top-bar { height: 100%; border-radius: 2px; transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.top-value { font-weight: 700; font-size: 12px; min-width: 28px; text-align: right; font-feature-settings: "tnum"; }
 
 .trend-chart-box { width: 100%; height: 140px; }
 
@@ -695,9 +699,9 @@ onUnmounted(() => {
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-.slide-right-enter-active, .slide-right-leave-active { transition: all 0.35s cubic-bezier(0.4,0,0.2,1); }
+.slide-right-enter-active, .slide-right-leave-active { transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .slide-right-enter-from, .slide-right-leave-to { opacity: 0; transform: translateX(30px); }
 
-.slide-left-enter-active, .slide-left-leave-active { transition: all 0.35s cubic-bezier(0.4,0,0.2,1); }
+.slide-left-enter-active, .slide-left-leave-active { transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .slide-left-enter-from, .slide-left-leave-to { opacity: 0; transform: translateX(-30px); }
 </style>

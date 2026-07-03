@@ -8,7 +8,7 @@ spring:
     import: "optional:nacos:"
   datasource:
     username: root
-    password: 182930
+    password: 1234
     url: jdbc:mysql://localhost:3306/nep_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     driver-class-name: com.mysql.cj.jdbc.Driver
   mail:
