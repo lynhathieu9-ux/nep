@@ -1,378 +1,179 @@
 <template>
-  <div class="alpine-records-canvas">
-    
-    <header class="records-header">
-      <div class="header-left">
-        <div class="title-with-icon">
-          <div class="glass-icon-box">
-            <el-icon><DataLine /></el-icon>
-          </div>
-          <h1 class="page-title">{{ dynamicText.pageTitle }}</h1>
+  <div class="root">
+    <!-- 顶栏 -->
+    <div class="top">
+      <div class="tl">
+        <h1>历史检测记录</h1>
+        <span class="cnt">{{ records.length }} 条归档记录</span>
+      </div>
+      <div class="tr">
+        <div class="sbox">
+          <span class="si">🔍</span>
+          <input v-model="searchQuery" placeholder="搜索编号、案件或备注..." class="sinp" />
         </div>
-        <span class="record-counter">{{ records.length }} {{ dynamicText.recordUnit }}</span>
-      </div>
-      
-      <div class="header-right">
-        <div class="alpine-search">
-          <el-icon class="search-icon"><Search /></el-icon>
-          <input 
-            type="text" 
-            v-model="searchQuery" 
-            :placeholder="dynamicText.searchPlaceholder"
-            class="search-input"
-          >
-        </div>
-        <button class="alpine-btn icon-only">
-          <el-icon><Filter /></el-icon>
-        </button>
-      </div>
-    </header>
-
-    <div class="overview-row">
-      <div class="overview-card">
-        <span class="overview-label">{{ dynamicText.statTotal }}</span>
-        <span class="overview-value">{{ records.length }}</span>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">{{ dynamicText.statAvgAqi }}</span>
-        <span class="overview-value text-azure">{{ avgAqi }}</span>
-      </div>
-      <div class="overview-card">
-        <span class="overview-label">{{ dynamicText.statHighRisk }}</span>
-        <span class="overview-value text-rose">{{ highRiskCount }}</span>
       </div>
     </div>
 
-    <main class="ledger-workspace">
-      
-      <div class="ledger-row is-header">
-        <div class="col-id">{{ dynamicText.colId }}</div>
-        <div class="col-task">{{ dynamicText.colTask }}</div>
-        <div class="col-metrics">{{ dynamicText.colMetrics }}</div>
-        <div class="col-remark">{{ dynamicText.colRemark }}</div>
-        <div class="col-time">{{ dynamicText.colTime }}</div>
-        <div class="col-aqi">{{ dynamicText.colAqi }}</div>
+    <!-- 概览卡片 -->
+    <div class="ov">
+      <div class="oc">
+        <span class="ol">累计检测总数</span>
+        <span class="ov">{{ records.length }}</span>
+      </div>
+      <div class="oc">
+        <span class="ol">历史平均 AQI</span>
+        <span class="ov az">{{ avgAqi }}</span>
+        <span class="os">基于 {{ records.length }} 条记录计算</span>
+      </div>
+      <div class="oc">
+        <span class="ol">污染超标次数</span>
+        <span class="ov ro">{{ highRiskCount }}</span>
+        <span class="os">AQI > 100 的记录</span>
+      </div>
+    </div>
+
+    <!-- 数据表格 -->
+    <div class="tbl">
+      <div class="th">
+        <div class="ci">记录编号</div>
+        <div class="ct">关联案件</div>
+        <div class="cm">环境指标 (AQI)</div>
+        <div class="cr">现场备注</div>
+        <div class="ctm">归档时间</div>
+        <div class="ca">最终AQI</div>
       </div>
 
-      <div class="ledger-scroll-area" v-loading="isLoading">
-        
-        <div v-if="filteredRecords.length === dynamicText.zeroCount && !isLoading" class="empty-state">
-          <el-icon class="empty-icon"><Document /></el-icon>
-          <p>{{ dynamicText.emptyDesc }}</p>
+      <div class="tb" v-loading="isLoading">
+        <div v-if="!isLoading && filteredRecords.length === 0" class="empty">
+          <p>暂无任何历史检测数据</p>
         </div>
 
-        <div 
-          v-else
-          v-for="record in filteredRecords" 
-          :key="record.id" 
-          class="ledger-row is-data"
-        >
-          <div class="col-id">
-            <span class="mono-text">{{ dynamicText.idPrefix }}{{ record.id }}</span>
+        <div v-for="r in filteredRecords" :key="r.id" class="tr">
+          <div class="ci"><span class="mono">REC-{{ r.id }}</span></div>
+          <div class="ct"><span class="badge">📋 {{ r.feedbackId || '无关联工单' }}</span></div>
+          <div class="cm">
+            <div class="mp"><span class="ml">SO₂</span><span class="mv">{{ r.so2Aqi || 0 }}</span></div>
+            <div class="mp"><span class="ml">CO</span><span class="mv">{{ r.coAqi || 0 }}</span></div>
+            <div class="mp"><span class="ml">PM2.5</span><span class="mv">{{ r.pm25Aqi || 0 }}</span></div>
           </div>
-          
-          <div class="col-task">
-            <span class="task-badge">
-              <el-icon><Monitor /></el-icon> {{ record.feedbackId || dynamicText.unboundTask }}
-            </span>
-          </div>
-          
-          <div class="col-metrics">
-            <div class="metric-pill">
-              <span class="m-label">SO₂</span><span class="m-val">{{ record.so2Aqi || 0 }}</span>
-            </div>
-            <div class="metric-pill">
-              <span class="m-label">CO</span><span class="m-val">{{ record.coAqi || 0 }}</span>
-            </div>
-            <div class="metric-pill">
-              <span class="m-label">PM2.5</span><span class="m-val">{{ record.pm25Aqi || 0 }}</span>
-            </div>
-          </div>
-          
-          <div class="col-remark">
-            <span class="remark-text">{{ record.remark || dynamicText.noRemark }}</span>
-          </div>
-          
-          <div class="col-time">
-            <span class="time-text">{{ formatTime(record.createTime) }}</span>
-          </div>
-          
-          <div class="col-aqi">
-            <div class="aqi-orb" :class="getAqiLevel(record.finalAqi)">
-              {{ record.finalAqi }}
-            </div>
+          <div class="cr"><span class="rm">{{ r.remark || '暂无现场备注' }}</span></div>
+          <div class="ctm"><span class="tm">{{ fmtTime(r.createTime) }}</span></div>
+          <div class="ca">
+            <span class="orb" :class="aqiLvl(r.finalAqi)">{{ r.finalAqi || 0 }}</span>
           </div>
         </div>
-        
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { getMyAqiRecords } from '@/api/aqi'
-import { DataLine, Search, Filter, Document, Monitor } from '@element-plus/icons-vue'
 
-// ==========================================
-// 1. 全局字典与文案（彻底消除模板硬编码）
-// ==========================================
-const dynamicText = ref({
-  pageTitle: '历史检测记录',
-  recordUnit: '条归档记录',
-  searchPlaceholder: '搜索编号、案件或备注...',
-  statTotal: '累计检测总数',
-  statAvgAqi: '历史平均 AQI',
-  statHighRisk: '污染超标次数',
-  colId: '记录编号',
-  colTask: '关联案件',
-  colMetrics: '环境指标监测 (AQI)',
-  colRemark: '现场备注',
-  colTime: '归档时间',
-  colAqi: '最终判定',
-  idPrefix: 'REC-',
-  unboundTask: '无关联工单',
-  noRemark: '暂无现场备注说明',
-  emptyDesc: '暂无任何历史检测数据',
-  zeroCount: 0
-})
-
-// ==========================================
-// 2. 状态与数据模型
-// ==========================================
 const records = ref([])
 const isLoading = ref(false)
 const searchQuery = ref('')
 
-// ==========================================
-// 3. 计算属性 (统计与过滤)
-// ==========================================
-const filteredRecords = computed(() => {
+const filteredRecords = computed(function() {
   if (!searchQuery.value) return records.value
-  const q = searchQuery.value.toLowerCase()
-  return records.value.filter(r => 
-    String(r.id).includes(q) || 
-    String(r.feedbackId || '').includes(q) || 
-    String(r.remark || '').toLowerCase().includes(q)
-  )
+  var q = searchQuery.value.toLowerCase()
+  return records.value.filter(function(r) {
+    return String(r.id).includes(q) ||
+      String(r.feedbackId || '').includes(q) ||
+      String(r.remark || '').toLowerCase().includes(q)
+  })
 })
 
-const avgAqi = computed(() => {
-  if (records.value.length === 0) return 0
-  const total = records.value.reduce((sum, r) => sum + (r.finalAqi || 0), 0)
+const avgAqi = computed(function() {
+  if (!records.value || records.value.length === 0) return 0
+  var total = records.value.reduce(function(sum, r) { return sum + (parseInt(r.finalAqi) || 0) }, 0)
   return Math.round(total / records.value.length)
 })
 
-const highRiskCount = computed(() => {
-  return records.value.filter(r => (r.finalAqi || 0) > 100).length
+const highRiskCount = computed(function() {
+  if (!records.value) return 0
+  return records.value.filter(function(r) { return (parseInt(r.finalAqi) || 0) > 100 }).length
 })
 
-// ==========================================
-// 4. 辅助函数
-// ==========================================
-const formatTime = (t) => {
-  if (!t) return dynamicText.value.noRemark
-  return t.replace('T', ' ').substring(0, 16)
+function fmtTime(t) {
+  if (!t) return '-'
+  return String(t).replace('T', ' ').substring(0, 16)
 }
 
-const getAqiLevel = (val) => {
-  const v = Number(val) || 0
-  if (v <= 50) return 'excellent'
-  if (v <= 150) return 'warning'
-  return 'danger'
+function aqiLvl(val) {
+  var v = parseInt(val) || 0
+  if (v <= 50) return 'good'
+  if (v <= 150) return 'warn'
+  return 'bad'
 }
 
-// ==========================================
-// 5. 生命周期与数据获取
-// ==========================================
-const fetchRecords = async () => {
-  const uid = localStorage.getItem('userId')
+async function fetchRecords() {
+  var uid = localStorage.getItem('userId')
   if (!uid) return
-  
   isLoading.value = true
   try {
-    const res = await getMyAqiRecords()
-    if (res && res.data) {
-      records.value = res.data
-    }
-  } catch (e) {
-    // 生产环境中可通过 ElMessage 提示错误
-  } finally {
-    isLoading.value = false
-  }
+    var res = await getMyAqiRecords()
+    if (res && res.data) records.value = res.data
+  } catch(e) { console.error('AQI记录加载失败:', e) }
+  finally { isLoading.value = false }
 }
 
-onMounted(() => {
-  fetchRecords()
-})
+onMounted(function() { fetchRecords() })
 </script>
 
 <style scoped>
-/* =======================================================
-   1. 顶级画布约束 (Strict Canvas) - 杜绝外层滚动
-======================================================= */
-.alpine-records-canvas {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  overflow: hidden;
-}
+.root { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 24px; color: #0F172A; }
 
-/* =======================================================
-   2. 顶部控制台 (Header Console)
-======================================================= */
-.records-header {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding-bottom: 24px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
-  margin-bottom: 24px;
-}
-.header-left { display: flex; align-items: baseline; gap: 16px; }
-.title-with-icon { display: flex; align-items: center; gap: 12px; }
-.glass-icon-box {
-  width: 40px; height: 40px; border-radius: 12px;
-  background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
-  color: #0284C7; display: flex; align-items: center; justify-content: center;
-  font-size: 20px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1);
-}
-.page-title { font-size: 24px; font-weight: 700; color: #0F172A; margin: 0; letter-spacing: 0.5px; }
-.record-counter { font-size: 14px; color: #64748B; font-weight: 500; }
+/* 顶栏 */
+.top { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 20px; border-bottom: 1px solid rgba(15,23,42,0.05); margin-bottom: 20px; flex-shrink: 0; }
+.tl { display: flex; align-items: baseline; gap: 14px; }
+.tl h1 { font-size: 22px; font-weight: 700; margin: 0; }
+.cnt { font-size: 13px; color: #64748B; font-weight: 500; }
+.tr { display: flex; align-items: center; gap: 12px; }
+.sbox { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(15,23,42,0.08); padding: 9px 16px; border-radius: 12px; width: 260px; }
+.si { font-size: 14px; }
+.sbox:focus-within { border-color: #0284C7; box-shadow: 0 0 0 3px rgba(2,132,199,0.08); }
+.sinp { border: none; outline: none; font-size: 13px; width: 100%; color: #0F172A; background: transparent; }
+.sinp::placeholder { color: #94A3B8; }
 
-.header-right { display: flex; align-items: center; gap: 16px; }
+/* 概览 */
+.ov { display: flex; gap: 20px; margin-bottom: 20px; flex-shrink: 0; }
+.oc { flex: 1; background: #fff; border-radius: 14px; padding: 18px 22px; border: 1px solid rgba(15,23,42,0.04); display: flex; flex-direction: column; gap: 6px; }
+.ol { font-size: 12px; color: #64748B; font-weight: 500; }
+.ov { font-size: 26px; font-weight: 800; color: #0F172A; }
+.ov.az { color: #0284C7; }
+.ov.ro { color: #F43F5E; }
+.os { font-size: 11px; color: #94A3B8; }
 
-/* 搜索框与按钮 */
-.alpine-search {
-  display: flex; align-items: center; gap: 8px;
-  background: white; border: 1px solid rgba(15, 23, 42, 0.08);
-  padding: 10px 16px; border-radius: 14px; width: 280px;
-  transition: all 0.3s;
-}
-.alpine-search:focus-within { border-color: #0284C7; box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1); }
-.search-icon { color: #94A3B8; font-size: 16px; }
-.search-input { border: none; outline: none; font-size: 14px; width: 100%; color: #0F172A; background: transparent; }
-.search-input::placeholder { color: #94A3B8; }
-
-.alpine-btn.icon-only {
-  width: 42px; height: 42px; border-radius: 14px;
-  background: white; border: 1px solid rgba(15, 23, 42, 0.08);
-  color: #64748B; display: flex; align-items: center; justify-content: center;
-  font-size: 18px; cursor: pointer; transition: all 0.3s;
-}
-.alpine-btn.icon-only:hover { border-color: #0284C7; color: #0284C7; }
-
-/* =======================================================
-   3. 顶部数据概览 (Overview Mini-Bento)
-======================================================= */
-.overview-row {
-  flex-shrink: 0;
-  display: flex; gap: 24px; margin-bottom: 24px;
-}
-.overview-card {
-  flex: 1; background: white; border-radius: 16px; padding: 20px 24px;
-  border: 1px solid rgba(15, 23, 42, 0.03);
-  box-shadow: 0 4px 16px -8px rgba(15, 23, 42, 0.04);
-  display: flex; flex-direction: column; gap: 8px;
-}
-.overview-label { font-size: 13px; color: #64748B; font-weight: 500; }
-.overview-value { font-size: 28px; font-weight: 800; color: #0F172A; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
-.text-azure { color: #0284C7; }
-.text-rose { color: #F43F5E; }
-
-/* =======================================================
-   4. 主数据账本 (Ledger Workspace) - 自适应填满
-======================================================= */
-.ledger-workspace {
-  flex: 1;
-  background: white;
-  border-radius: 20px;
-  border: 1px solid rgba(15, 23, 42, 0.04);
-  box-shadow: 0 4px 24px -8px rgba(15, 23, 42, 0.03);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* 统一列宽配比 (CSS Grid) */
-.ledger-row {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr 2.5fr 2fr 1.5fr 1fr;
-  align-items: center;
-  gap: 16px;
-  padding: 0 32px;
-}
-
-/* 表头行 */
-.is-header {
-  flex-shrink: 0; height: 56px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-  background: rgba(248, 250, 252, 0.5);
-  font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;
-}
-
-/* 数据滚动区 */
-.ledger-scroll-area {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-/* macOS 风格内滚动条 */
-.ledger-scroll-area::-webkit-scrollbar { width: 6px; }
-.ledger-scroll-area::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.08); border-radius: 6px; }
-.ledger-scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.15); }
+/* 表格 */
+.tbl { flex: 1; background: #fff; border-radius: 16px; border: 1px solid rgba(15,23,42,0.04); display: flex; flex-direction: column; overflow: hidden; }
+.th { display: grid; grid-template-columns: 1fr 1.5fr 2.5fr 2fr 1.5fr 1fr; align-items: center; gap: 14px; padding: 0 28px; height: 48px; flex-shrink: 0; border-bottom: 1px solid rgba(15,23,42,0.05); background: rgba(248,250,252,0.5); font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.3px; }
+.tb { flex: 1; overflow-y: auto; min-height: 0; }
+.tb::-webkit-scrollbar { width: 5px; }
+.tb::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.06); border-radius: 4px; }
 
 /* 数据行 */
-.is-data {
-  height: 72px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.03);
-  transition: background 0.2s;
-}
-.is-data:hover { background: rgba(241, 245, 249, 0.4); }
-.is-data:last-child { border-bottom: none; }
+.tr { display: grid; grid-template-columns: 1fr 1.5fr 2.5fr 2fr 1.5fr 1fr; align-items: center; gap: 14px; padding: 0 28px; height: 66px; border-bottom: 1px solid rgba(15,23,42,0.03); transition: background 0.15s; }
+.tr:hover { background: rgba(241,245,249,0.4); }
+.tr:last-child { border-bottom: none; }
+.mono { font-family: monospace; font-size: 12px; color: #475569; font-weight: 600; }
+.badge { display: inline-flex; align-items: center; gap: 4px; background: #F1F5F9; color: #475569; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
 
-/* =======================================================
-   5. 列内容定制化样式 (Cell Styles)
-======================================================= */
-.mono-text { font-family: monospace; font-size: 13px; color: #475569; font-weight: 600; }
+/* 指标 */
+.cm { display: flex; gap: 10px; }
+.mp { display: flex; align-items: center; background: #fff; border: 1px solid rgba(15,23,42,0.05); border-radius: 5px; overflow: hidden; }
+.ml { background: #F8FAFC; color: #64748B; font-size: 10px; font-weight: 600; padding: 3px 5px; border-right: 1px solid rgba(15,23,42,0.05); }
+.mv { font-size: 11px; font-weight: 700; color: #0F172A; padding: 3px 7px; font-family: monospace; }
+.rm { font-size: 12px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 90%; }
+.tm { font-size: 12px; color: #94A3B8; }
 
-.task-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #F1F5F9; color: #475569; font-size: 12px; font-weight: 600;
-  padding: 4px 10px; border-radius: 8px;
-}
+/* AQI 圆标 */
+.ca { display: flex; justify-content: flex-end; }
+.orb { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; font-family: monospace; }
+.orb.good { background: #F0FDF4; color: #10B981; }
+.orb.warn { background: #FFFBEB; color: #F59E0B; }
+.orb.bad { background: #FEF2F2; color: #EF4444; }
 
-.col-metrics { display: flex; gap: 12px; }
-.metric-pill {
-  display: flex; align-items: center;
-  background: white; border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 6px; overflow: hidden;
-}
-.m-label { background: #F8FAFC; color: #64748B; font-size: 10px; font-weight: 600; padding: 4px 6px; border-right: 1px solid rgba(15, 23, 42, 0.06); }
-.m-val { font-size: 12px; font-weight: 700; color: #0F172A; padding: 4px 8px; font-family: monospace; }
-
-.remark-text { font-size: 13px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 90%; }
-
-.time-text { font-size: 13px; color: #94A3B8; }
-
-/* 最终 AQI 纯净圆环 */
-.col-aqi { display: flex; justify-content: flex-end; }
-.aqi-orb {
-  width: 36px; height: 36px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 800; font-family: monospace;
-}
-.aqi-orb.excellent { background: #F0FDF4; color: #10B981; border: 1px solid rgba(16, 185, 129, 0.2); }
-.aqi-orb.warning { background: #FFFBEB; color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.2); }
-.aqi-orb.danger { background: #FEF2F2; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.2); }
-
-/* 空状态 */
-.empty-state {
-  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: #94A3B8; font-size: 14px;
-}
-.empty-icon { font-size: 48px; margin-bottom: 16px; color: #E2E8F0; }
+.empty { height: 100%; display: flex; align-items: center; justify-content: center; color: #94A3B8; font-size: 13px; }
 </style>

@@ -1,23 +1,23 @@
 <template>
-  <div class="nepv-layout">
-    <!-- 顶栏 -->
-    <header class="nepv-topbar">
-      <div class="brand">
-        <span class="brand-icon">📊</span>
-        <span class="brand-name">NEP 环保决策中枢</span>
+  <div class="lay">
+    <header class="bar">
+      <div class="bar-l">
+        <span class="brand">NEP 环保决策中枢</span>
       </div>
-      <div class="topbar-tabs">
-        <router-link to="/nepv/dashboard" class="tab" active-class="tab-active">数据大屏</router-link>
-        <router-link to="/nepv/statistics" class="tab" active-class="tab-active">详细统计</router-link>
-        <router-link to="/nepv/news" class="tab" active-class="tab-active">环保资讯</router-link>
-        <router-link to="/nepv/knowledge" class="tab" active-class="tab-active">知识库</router-link>
-        <router-link to="/nepv/ai" class="tab" active-class="tab-active">AI 助手</router-link>
+      <div class="bar-c">
+        <router-link to="/nepv/dashboard" class="t" active-class="t-on">数据大屏</router-link>
+        <router-link to="/nepv/statistics" class="t" active-class="t-on">详细统计</router-link>
+        <router-link to="/nepv/news" class="t" active-class="t-on">环保资讯</router-link>
+        <router-link to="/nepv/knowledge" class="t" active-class="t-on">知识库</router-link>
+        <router-link to="/nepv/ai" class="t" active-class="t-on">AI助手</router-link>
       </div>
-      <div class="topbar-right">
-        <span class="vip-badge">决策者</span>
+      <div class="bar-r">
+        <span class="tm">{{ currentTime }}</span>
+        <span class="loc">📍 中国</span>
+        <span class="badge">决策者</span>
         <el-dropdown trigger="click">
-          <span class="user-info">
-            <el-avatar :size="32" icon="UserFilled" />
+          <span class="usr">
+            <el-avatar :size="24" icon="UserFilled" />
             <span>{{ userName }}</span>
           </span>
           <template #dropdown>
@@ -28,62 +28,42 @@
         </el-dropdown>
       </div>
     </header>
-
-    <main class="nepv-main">
+    <main class="m">
       <router-view />
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-
 const router = useRouter()
 const userStore = useUserStore()
-const userName = computed(() => userStore.userName || '决策者')
-
+const userName = computed(function() { return userStore.userName || 'ZhaoLi' })
+const currentTime = ref('')
+function updateTime() { var n = new Date(); currentTime.value = String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0') }
+var timer = null
+onMounted(function() { updateTime(); timer = setInterval(updateTime, 1000) })
+onUnmounted(function() { if (timer) clearInterval(timer) })
 function handleLogout() { localStorage.clear(); router.push('/login') }
 </script>
 
 <style scoped>
-.nepv-layout {
-  display: flex; flex-direction: column; height: 100vh;
-  background: #F4F6F5; color: #1C2421;
-  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
-}
-
-/* 顶栏 — 毛玻璃 */
-.nepv-topbar {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0 28px; height: 56px;
-  background: rgba(255,255,255,0.55);
-  backdrop-filter: blur(40px) saturate(160%);
-  -webkit-backdrop-filter: blur(40px) saturate(160%);
-  border-bottom: 1px solid rgba(255,255,255,0.7);
-  flex-shrink: 0; z-index: 10;
-}
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand-icon { font-size: 20px; }
-.brand-name { font-size: 17px; font-weight: 700; color: #1C2421; letter-spacing: 0.3px; }
-
-.topbar-tabs { display: flex; gap: 2px; }
-.tab {
-  padding: 8px 22px; color: #74807B; text-decoration: none;
-  font-size: 14px; font-weight: 500; border-radius: 10px;
-  transition: all 0.2s;
-}
-.tab:hover { color: #1C2421; background: rgba(28,36,33,0.04); }
-.tab-active { color: #2A483A !important; background: rgba(42,72,58,0.08) !important; font-weight: 600; }
-
-.topbar-right { display: flex; align-items: center; gap: 14px; }
-.vip-badge {
-  padding: 5px 14px; color: #2A483A;
-  font-size: 12px; font-weight: 600;
-  background: rgba(42,72,58,0.08); border-radius: 10px;
-}
-.user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #1C2421; font-weight: 500; }
-
-.nepv-main { flex: 1; overflow-y: auto; }
+.lay { display:flex; flex-direction:column; height:100vh; background:#030A18; color:#e8e8e8; font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,sans-serif; overflow:hidden; }
+.bar { display:flex; justify-content:space-between; align-items:center; padding:0 28px; height:52px; background:rgba(10,22,45,0.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; z-index:100; }
+.brand { font-size:15px; font-weight:700; color:#00E5FF; letter-spacing:1px; text-shadow:0 0 8px rgba(0,229,255,0.3); }
+.bar-c { display:flex; gap:2px; background:rgba(255,255,255,0.03); padding:3px; border-radius:10px; border:1px solid rgba(255,255,255,0.05); }
+.t { padding:7px 20px; color:#8A9EBC; text-decoration:none; font-size:13px; font-weight:500; border-radius:8px; transition:all 0.25s; letter-spacing:0.3px; }
+.t:hover { color:#c8d6e5; }
+.t-on { color:#fff!important; background:rgba(0,229,255,0.15); box-shadow:0 0 12px rgba(0,229,255,0.2); font-weight:600; }
+.bar-r { display:flex; align-items:center; gap:14px; }
+.tm { font-size:12px; color:#8A9EBC; font-family:monospace; }
+.loc { font-size:12px; color:#8A9EBC; }
+.badge { padding:4px 12px; color:#00E5FF; font-size:11px; font-weight:600; background:rgba(0,229,255,0.08); border-radius:8px; border:1px solid rgba(0,229,255,0.2); }
+.usr { display:flex; align-items:center; gap:6px; cursor:pointer; color:#c8d6e5; font-weight:500; font-size:12px; }
+.m { flex:1; overflow-y:auto; overflow-x:hidden; }
+.m::-webkit-scrollbar { width:5px; }
+.m::-webkit-scrollbar-track { background:rgba(0,0,0,0.2); }
+.m::-webkit-scrollbar-thumb { background:rgba(0,229,255,0.15); border-radius:3px; }
 </style>
