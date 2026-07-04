@@ -11,9 +11,7 @@
 
     <div class="main-content">
       <div class="map-area">
-        <Map3D />
-        <RightPanel />
-        <LeftPanel />
+        <MapView />
       </div>
 
       <BottomCharts />
@@ -24,9 +22,7 @@
 <script setup>
 import Header from '@/components/dashboard/Header.vue'
 import TopCards from '@/components/dashboard/TopCards.vue'
-import Map3D from '@/components/dashboard/Map3D.vue'
-import RightPanel from '@/components/dashboard/RightPanel.vue'
-import LeftPanel from '@/components/dashboard/LeftPanel.vue'
+import MapView from '@/components/MapView.vue'
 import BottomCharts from '@/components/dashboard/BottomCharts.vue'
 </script>
 

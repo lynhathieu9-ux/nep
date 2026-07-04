@@ -46,6 +46,10 @@ async function loadGeo(url){ if(geoCache[url])return geoCache[url];var r=await f
 
 function matchPN(n){ var s=n.replace(/省|市|自治区|维吾尔自治区|壮族自治区|回族自治区|特别行政区/g,'');return[n,s] }
 
+var CENTERS={110000:[116.4,39.9],120000:[117.2,39.1],130000:[114.5,38.0],130100:[114.5,38.0],130400:[114.5,36.6],140000:[112.5,37.9],150000:[111.7,40.8],210000:[123.4,41.8],220000:[125.3,43.9],230000:[126.6,45.8],310000:[121.5,31.2],320000:[118.8,32.0],330000:[120.2,30.3],340000:[117.3,31.9],350000:[119.3,26.1],360000:[115.9,28.7],370000:[117.0,36.7],410000:[113.7,34.8],420000:[114.3,30.6],430000:[113.0,28.2],440000:[113.3,23.1],450000:[108.3,22.8],460000:[110.3,20.0],500000:[106.5,29.5],510000:[104.1,30.7],510100:[104.1,30.6],510300:[104.8,29.3],510400:[101.7,26.6],510500:[105.4,28.9],510600:[104.4,31.1],510700:[104.7,31.5],510800:[105.8,32.4],510900:[105.6,30.5],511000:[105.0,29.6],511100:[103.8,29.5],511300:[106.1,30.8],511400:[103.8,30.1],511500:[104.6,28.8],511600:[106.6,30.5],511700:[107.5,31.2],511800:[103.0,29.9],511900:[106.7,31.9],513200:[103.6,31.5],513300:[101.9,30.0],513400:[102.3,27.9],520000:[106.7,26.6],530000:[102.7,25.0],540000:[91.1,29.7],610000:[108.9,34.3],620000:[103.8,36.1],630000:[101.8,36.6],640000:[106.3,38.5],650000:[87.6,43.8]}
+function getCenter(code, item){ if(!code)return[105,35];if(item&&item.longitude&&item.latitude)return[item.longitude,item.latitude];var c=CENTERS[code];return c||[105,35] }
+function getCityCenter(city){ if(city&&city.cityCode){var cc=parseInt(city.cityCode);if(cc&&CENTERS[cc])return CENTERS[cc]}if(city&&city.provinceId){var pc=parseInt(city.provinceId);if(pc&&CENTERS[pc])return CENTERS[pc]}return[105,35] }
+
 async function renderChina(){
   if(!chart)return
   var geo=await loadGeo(CHINA_URL); echarts.registerMap('china',geo)
@@ -61,18 +65,20 @@ async function renderChina(){
     series:[{type:'map',map:'china',geoIndex:0,label:{show:false},
       data:Object.keys(pm).map(function(n){return{name:n,value:pm[n].aqi}}),
       itemStyle:{borderColor:'rgba(74,144,226,0.25)',borderWidth:0.6}
-    },{type:'effectScatter',coordinateSystem:'geo',
-      data:provData.filter(function(p){return p.avgAqi!=null}).map(function(p){var c=[(p.longitude||116),(p.latitude||39),p.avgAqi];return{name:p.provinceName,value:c,aqi:p.avgAqi}}),
-      symbolSize:function(v){return Math.max(3,Math.min((v[2]||50)/6,10))},
+    },{type:'effectScatter',coordinateSystem:'geo',geoIndex:0,
+      data:provData.filter(function(p){return p.avgAqi!=null}).map(function(p){var xy=p.provinceCode?getCenter(parseInt(p.provinceCode),p):getCenter(p.provinceId,p);var c=[xy[0],xy[1],p.avgAqi];return{name:p.provinceName,value:c,aqi:p.avgAqi}}),
+      symbolSize:function(v){return Math.max(5,Math.min((v[2]||50)/5,12))},
       showEffectOn:'render',
-      rippleEffect:{brushType:'stroke',scale:2.5,period:3},
-      itemStyle:{color:function(p){return getAqiColor(p.data.aqi)},opacity:0.9},symbol:'diamond',zlevel:5
-    },{type:'effectScatter',coordinateSystem:'geo',
-      data:provData.filter(function(p){return p.avgAqi!=null&&p.avgAqi>80}).slice(0,10).map(function(p){var c=[(p.longitude||116),(p.latitude||39),p.avgAqi];return{name:p.provinceName,value:c,aqi:p.avgAqi}}),
-      symbolSize:function(v){return Math.max(5,Math.min((v[2]||50)/3,16))},
+      rippleEffect:{brushType:'stroke',scale:2,period:4},
+      label:{show:true,formatter:function(p){return p.name+' '+Math.round(p.data.aqi)},position:'right',color:'#c8d6e5',fontSize:10},
+      itemStyle:{color:function(p){return getAqiColor(p.data.aqi)},opacity:0.95,shadowBlur:8,shadowColor:function(p){return getAqiColor(p.data.aqi)}},symbol:'circle',zlevel:5
+    },{type:'effectScatter',coordinateSystem:'geo',geoIndex:0,
+      data:provData.filter(function(p){return p.avgAqi!=null&&p.avgAqi>80}).slice(0,10).map(function(p){var xy=p.provinceCode?getCenter(parseInt(p.provinceCode),p):getCenter(p.provinceId,p);var c=[xy[0],xy[1],p.avgAqi];return{name:p.provinceName,value:c,aqi:p.avgAqi}}),
+      symbolSize:function(v){return Math.max(6,Math.min((v[2]||50)/3,16))},
       showEffectOn:'render',
-      rippleEffect:{brushType:'stroke',scale:3,period:2},
-      itemStyle:{color:'#fff',opacity:0.9},symbol:'star',zlevel:6
+      rippleEffect:{brushType:'stroke',scale:3,period:3},
+      label:{show:true,formatter:function(p){return p.name+' '+Math.round(p.data.aqi)},position:'right',color:'#fff',fontSize:11,fontWeight:600},
+      itemStyle:{color:'#fff',opacity:0.95,shadowBlur:12,shadowColor:'rgba(255,255,255,0.5)'},symbol:'circle',zlevel:6
     }]
   },true)
   level.value='china';curProv.value=''
@@ -91,6 +97,13 @@ async function drillDown(name,code){
     series:[{type:'map',map:mn,geoIndex:0,label:{show:true,fontSize:10,color:'#8A9EBC'},
       data:geo.features.map(function(f){var gn=f.properties.name;var info=cm[gn];return{name:gn,value:info?info.aqi:-1}}),
       itemStyle:{borderColor:'rgba(74,144,226,0.2)',borderWidth:0.6}
+    },{type:'effectScatter',coordinateSystem:'geo',geoIndex:0,
+      data:cityData.filter(function(c){return c.provinceName&&matchPN(c.provinceName).some(function(n){return n===name||name.includes(n)||n.includes(name)})&&c.avgAqi!=null}).map(function(c){var xy=getCenter(c.cityId||c.provinceId,c);return{name:c.cityName,value:[xy[0],xy[1],c.avgAqi],aqi:c.avgAqi}}),
+      symbolSize:function(v){return Math.max(5,Math.min((v[2]||50)/5,12))},
+      showEffectOn:'render',
+      rippleEffect:{brushType:'stroke',scale:2,period:3},
+      label:{show:true,formatter:function(p){return p.name+' '+Math.round(p.data.aqi)},position:'right',color:'#c8d6e5',fontSize:10},
+      itemStyle:{color:function(p){return getAqiColor(p.data.aqi)},opacity:0.95,shadowBlur:8,shadowColor:function(p){return getAqiColor(p.data.aqi)}},symbol:'circle',zlevel:5
     }]
   },false)
   level.value='city'

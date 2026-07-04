@@ -354,7 +354,8 @@ async function drillDown(name, code) {
     var dp = []
     geo.features.forEach(function(f) {
       var gn = f.properties.name
-      var info = cm[gn]
+      // 尝试原始名称匹配，再尝试去后缀匹配（如"德阳市"→"德阳"）
+      var info = cm[gn] || cm[gn.replace(/市|州|地区|盟|自治州/g, '')]
       dp.push({ name: gn, value: info ? info.aqi : -1, count: info ? info.count : 0, maxAqi: info ? info.maxAqi : 0, hasData: info != null })
     })
 
@@ -391,6 +392,18 @@ async function drillDown(name, code) {
         itemStyle: { borderColor: 'rgba(0,229,255,0.08)', borderWidth: 0.8, areaColor: 'transparent' },
         emphasis: { label: { show: true, fontSize: 12, color: '#E0E8F5' }, itemStyle: { areaColor: 'rgba(0,229,255,0.06)', borderColor: 'rgba(0,229,255,0.3)' } },
         data: dp
+      }, { type: 'effectScatter', coordinateSystem: 'geo', geoIndex: 1,
+        data: dp.filter(function(d) { return d.hasData }).map(function(d) {
+          // 从GeoJSON feature中取中心坐标
+          var feature = geo.features.find(function(f) { return f.properties.name === d.name || f.properties.name.replace(/市|州|地区|盟|自治州/g,'') === d.name })
+          var coords = feature && feature.properties && feature.properties.center ? feature.properties.center : (feature && feature.properties && feature.properties.cp ? feature.properties.cp : [105, 35])
+          return { name: d.name, value: [coords[0], coords[1], d.value], aqi: d.value }
+        }),
+        symbolSize: function(v) { return Math.max(5, Math.min((v[2]||50)/5, 12)) },
+        showEffectOn: 'render',
+        rippleEffect: { brushType: 'stroke', scale: 2, period: 3 },
+        label: { show: true, formatter: function(p) { return p.name + ' ' + Math.round(p.data.aqi) }, position: 'right', color: '#c8d6e5', fontSize: 10 },
+        itemStyle: { color: function(p) { return getAqiColor(p.data.aqi) }, opacity: 0.95 }, symbol: 'circle', zlevel: 5
       }]
     }, false)
 
@@ -506,9 +519,9 @@ onUnmounted(function() {
 
 .mv-top5-row {
   display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 10px;
-  cursor: pointer; transition: all 0.25s ease; margin-bottom: 2px;
+  cursor: pointer; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), background 0.25s, box-shadow 0.25s; margin-bottom: 2px;
 }
-.mv-top5-row:hover { background: rgba(255,255,255,0.04); }
+.mv-top5-row:hover { background: rgba(255,255,255,0.08); transform: translateX(4px) scale(1.03); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
 .mv-top5-rk { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; background: rgba(255,255,255,0.06); color: #8A9EBC; }
 .mv-top5-rk.rk-1 { background: #E11D48; color: #fff; }
 .mv-top5-rk.rk-2 { background: #D97706; color: #fff; }
